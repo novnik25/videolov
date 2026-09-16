@@ -364,7 +364,11 @@ async function checkHealth() {
 
 (async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  tabId = tab?.id ?? null;
+  // popup.html?tab=<номер> — открыть окно для чужой вкладки. Нужно, чтобы окно
+  // можно было посмотреть отдельной страницей: открытое так, оно иначе считает
+  // активной вкладкой само себя и показывает пустой список.
+  const forced = Number(new URLSearchParams(location.search).get("tab"));
+  tabId = Number.isInteger(forced) && forced > 0 ? forced : (tab?.id ?? null);
   await refresh();
   await checkHealth();
 })();

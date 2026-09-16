@@ -1,7 +1,7 @@
 // Проверка распознавания: что считаем видео, что — мусором.
 const BASE = "file:///C:/Users/novos/OneDrive/Документы/Claude/Projects/Видеолов/extension/lib/";
 const { classify, dedupKey, isKnownSite } = await import(BASE + "detect.js");
-const { parseMaster, isMaster } = await import(BASE + "hls.js");
+const { parseMaster, isMaster, bestPerHeight } = await import(BASE + "hls.js");
 
 let bad = 0;
 const check = (name, got, want) => {
@@ -61,6 +61,19 @@ check("по убыванию", vars.map((v) => v.height), [1080, 720, 360]);
 check("относительный путь развёрнут", vars[1].url, "https://cdn.example.ru/hls/720/index.m3u8");
 check("абсолютный путь сохранён", vars[0].url, "https://cdn2.example.ru/1080/index.m3u8");
 check("запятая внутри CODECS не сломала разбор", vars[1].bandwidth, 2400000);
+
+
+// --- повторы качеств ---
+const dup = `#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080,CODECS="avc1"
+a/1080.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=9000000,RESOLUTION=1920x1080,CODECS="hvc1"
+b/1080.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=2400000,RESOLUTION=1280x720
+a/720.m3u8`;
+const uniq = bestPerHeight(parseMaster(dup, "https://cdn.example.ru/hls/master.m3u8"));
+check("одно разрешение — одна строка", uniq.map((v) => v.height), [1080, 720]);
+check("из повторов остался самый жирный", uniq[0].bandwidth, 9000000);
 
 const media = "#EXTM3U\n#EXTINF:6.0,\nseg1.ts\n#EXTINF:6.0,\nseg2.ts";
 check("поток сегментов — не мастер", isMaster(media), false);

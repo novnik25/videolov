@@ -35,6 +35,22 @@ export function parseMaster(text, baseUrl) {
   return out;
 }
 
+/**
+ * Одно разрешение — одна строка списка.
+ * В мастер-плейлисте варианты одного размера повторяются: разные кодеки, разные
+ * группы звука, разный битрейт. В выпадашке это выглядело как «1080p» девять
+ * раз подряд — выбрать нельзя, понять нечего. Оставляем самый жирный поток
+ * каждого разрешения. Поймано живой проверкой 16.09.2026.
+ */
+export function bestPerHeight(variants) {
+  const best = new Map();
+  for (const v of variants) {
+    const prev = best.get(v.height);
+    if (!prev || v.bandwidth > prev.bandwidth) best.set(v.height, v);
+  }
+  return [...best.values()].sort((a, b) => b.height - a.height || b.bandwidth - a.bandwidth);
+}
+
 /** Похоже ли это на плейлист вообще. */
 export function looksLikePlaylist(text) {
   return /^\s*#EXTM3U/.test(String(text));
@@ -72,7 +88,7 @@ export async function probeHls(url) {
   const text = await res.text();
   if (!looksLikePlaylist(text)) throw new Error("это не плейлист HLS");
   if (!isMaster(text)) return { variants: [], single: true };
-  return { variants: parseMaster(text, url), single: false };
+  return { variants: bestPerHeight(parseMaster(text, url)), single: false };
 }
 
 /** Подпись качества для списка: «1080p», «720p», «исходное». */
