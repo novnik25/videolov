@@ -32,6 +32,7 @@ async function load() {
   $("#perSite").checked = s.perSite !== false;
   $("#threads").value = s.threads || 16;
   $("#threads-val").textContent = s.threads || 16;
+  paintSlider($("#threads"));
   $("#audioFormat").value = s.audioFormat || "m4a";
 }
 
@@ -54,8 +55,17 @@ $("#reset-folder").addEventListener("click", async () => {
 
 $("#perSite").addEventListener("change", (e) => save({ perSite: e.target.checked }));
 
+/** Доля закрашенной дорожки ползунка — её рисует CSS через --fill. */
+function paintSlider(input) {
+  const min = Number(input.min) || 0;
+  const max = Number(input.max) || 100;
+  const pct = ((Number(input.value) - min) / (max - min)) * 100;
+  input.style.setProperty("--fill", `${pct}%`);
+}
+
 $("#threads").addEventListener("input", (e) => {
   $("#threads-val").textContent = e.target.value;
+  paintSlider(e.target);
 });
 $("#threads").addEventListener("change", (e) => save({ threads: Number(e.target.value) }));
 

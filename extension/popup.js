@@ -6,6 +6,38 @@ let tabId = null;
 let state = { found: [], jobs: {}, history: [], settings: {} };
 const probes = new Map(); // id находки → список качеств (чтобы не спрашивать дважды)
 const opened = new Set(); // какие карточки раскрыты
+const modes = new Map(); // id находки → выбранный режим
+const names = new Map(); // id находки → имя, которое правит человек
+const painted = new Set(); // что уже показывали: повторно не анимируем
+
+/* --------------------------------------------------------------- значки */
+
+// Рисунки из набора Lucide: одна толщина линии, одинаковые скругления.
+// Не эмодзи: те зависят от системного шрифта и не подчиняются цвету темы.
+const PATHS = {
+  download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4 M7 10l5 5 5-5 M12 15V3",
+  chevron: "M6 9l6 6 6-6",
+  play: "M5 3l14 9-14 9z",
+  folder: "M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2z",
+  trash: "M3 6h18 M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6",
+  x: "M18 6L6 18 M6 6l12 12",
+  check: "M20 6L9 17l-5-5",
+  alert: "M12 9v4 M12 17h.01 M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",
+  pause: "M6 4h4v16H6z M14 4h4v16h-4z",
+};
+
+function icon(name, cls) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  if (cls) svg.setAttribute("class", cls);
+  for (const d of PATHS[name].split(" M")) {
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", d.startsWith("M") ? d : "M" + d);
+    svg.append(p);
+  }
+  return svg;
+}
 
 /* ------------------------------------------------------------- обёртки */
 
@@ -70,23 +102,57 @@ chrome.runtime.onMessage.addListener((msg) => {
 
 /* ------------------------------------------------------------ отрисовка */
 
+/**
+ * Перерисовка.
+ * ⚠ Во время загрузки состояние обновляется каждые 250 мс, и полная замена
+ * содержимого выбрасывала бы поле с недописанным именем вместе с курсором.
+ * Поэтому набранное хранится отдельно (names), а фокус и положение курсора
+ * возвращаются на место после отрисовки.
+ */
 function render() {
+  const active = document.activeElement;
+  const key = active?.dataset?.nameFor || null;
+  const caret = key ? [active.selectionStart, active.selectionEnd] : null;
+
   renderFound();
   renderJobs();
   renderHistory();
+
+  if (!key) return;
+  const next = document.querySelector(`input[data-name-for="${CSS.escape(key)}"]`);
+  if (!next) return;
+  next.focus();
+  try {
+    next.setSelectionRange(caret[0], caret[1]);
+  } catch {
+    /* поле могло смениться — курсор встанет в конец */
+  }
+}
+
+/** Каскад появления: каждая следующая карточка на 40 мс позже предыдущей. */
+function stagger(node, key, index) {
+  if (painted.has(key)) {
+    node.style.animation = "none";
+    return;
+  }
+  painted.add(key);
+  node.style.animationDelay = `${Math.min(index, 6) * 40}ms`;
 }
 
 function renderFound() {
   const box = $("#found");
   box.replaceChildren();
-  $("#found-count").textContent = state.found.length ? `· ${state.found.length}` : "";
+  const count = $("#found-count");
+  count.textContent = String(state.found.length);
+  count.hidden = state.found.length === 0;
   $("#empty").hidden = state.found.length > 0;
 
-  for (const item of state.found) box.append(foundCard(item));
+  state.found.forEach((item, i) => box.append(foundCard(item, i)));
 }
 
-function foundCard(item) {
+function foundCard(item, index) {
   const card = el("div", "card");
+  stagger(card, `f:${item.id}`, index);
 
   const head = el("div", "card-head");
   head.append(el("span", "tag", item.label));
@@ -97,7 +163,16 @@ function foundCard(item) {
   card.append(head);
 
   const isOpen = opened.has(item.id);
-  const toggle = el("button", "ghost", isOpen ? "Свернуть" : "Скачать…");
+
+  const toggle = el("button", "ghost");
+  toggle.setAttribute("aria-expanded", String(isOpen));
+  // Раскрытая карточка уже показывает главную кнопку «Скачать» — вторая такая
+  // же рядом только путает, поэтому подпись меняется.
+  toggle.append(
+    icon("download"),
+    el("span", null, isOpen ? "Свернуть" : "Скачать"),
+    icon("chevron", "chev"),
+  );
   toggle.addEventListener("click", () => {
     isOpen ? opened.delete(item.id) : opened.add(item.id);
     render();
@@ -115,25 +190,42 @@ function foundCard(item) {
   const nameRow = el("div", "row");
   const nameInput = el("input");
   nameInput.type = "text";
-  nameInput.value = item.name || "";
+  nameInput.value = names.has(item.id) ? names.get(item.id) : item.name || "";
+  nameInput.dataset.nameFor = item.id;
+  nameInput.setAttribute("aria-label", "Имя файла");
   nameInput.title = "Имя файла — можно поправить до старта";
+  nameInput.addEventListener("input", () => names.set(item.id, nameInput.value));
   nameRow.append(nameInput);
   card.append(nameRow);
 
   const optRow = el("div", "row");
 
-  const modeSel = el("select");
-  for (const [v, t] of [
-    ["av", "Видео + звук"],
-    ["a", "Только звук"],
-    ["v", "Только видео"],
+  // Режим: все три варианта на виду, выбранный подсвечен.
+  const mode = modes.get(item.id) || "av";
+  const seg = el("div", "seg");
+  seg.setAttribute("role", "group");
+  seg.setAttribute("aria-label", "Что скачивать");
+  const qualSel = el("select");
+  for (const [v, t, hint] of [
+    ["av", "Видео", "видео со звуком"],
+    ["a", "Звук", "только звуковая дорожка"],
+    ["v", "Без звука", "только видео, без звука"],
   ]) {
-    const o = el("option", null, t);
-    o.value = v;
-    modeSel.append(o);
+    const b = el("button", null, t);
+    b.type = "button";
+    b.title = hint;
+    b.setAttribute("aria-pressed", String(mode === v));
+    b.addEventListener("click", () => {
+      modes.set(item.id, v);
+      for (const other of seg.children) other.setAttribute("aria-pressed", "false");
+      b.setAttribute("aria-pressed", "true");
+      // Звук перекодируется целиком — выбирать разрешение там нечего.
+      qualSel.disabled = v === "a" || !probes.get(item.id);
+    });
+    seg.append(b);
   }
 
-  const qualSel = el("select");
+  qualSel.setAttribute("aria-label", "Качество");
   const cached = probes.get(item.id);
   if (!cached) {
     const o = el("option", null, "качества…");
@@ -151,6 +243,7 @@ function foundCard(item) {
       qualSel.append(o);
     }
   }
+  if (mode === "a") qualSel.disabled = true;
 
   const go = el("button", "go", "Скачать");
   go.addEventListener("click", async () => {
@@ -166,11 +259,12 @@ function foundCard(item) {
       await send("download", {
         itemId: item.id,
         name: nameInput.value.trim() || item.name,
-        mode: modeSel.value,
+        mode: modes.get(item.id) || "av",
         formatId: pick.id || "",
         height: pick.height || 0,
       });
       opened.delete(item.id);
+      names.delete(item.id);
       await refresh();
     } catch (e) {
       go.disabled = false;
@@ -179,14 +273,12 @@ function foundCard(item) {
     }
   });
 
-  optRow.append(modeSel, qualSel, go);
-  card.append(optRow);
-
-  // Звук перекодируется — список качеств видео к нему неприменим.
-  modeSel.addEventListener("change", () => {
-    qualSel.disabled = modeSel.value === "a" || !probes.get(item.id);
-  });
-
+  // Два ряда, а не один: переключатель, выпадашка и кнопка в 344 пикселя
+  // не помещаются и переносятся вразнобой.
+  optRow.append(seg);
+  const goRow = el("div", "row split");
+  goRow.append(qualSel, go);
+  card.append(optRow, goRow);
   return card;
 }
 
@@ -211,8 +303,10 @@ function renderJobs() {
   const box = $("#jobs");
   box.replaceChildren();
 
-  for (const job of jobs) {
+  jobs.forEach((job, i) => {
     const card = el("div", "card");
+    stagger(card, `j:${job.id}`, i);
+
     const head = el("div", "card-head");
     head.append(el("span", "tag", modeTag(job.mode)));
     const t = el("div", "title");
@@ -225,45 +319,56 @@ function renderJobs() {
       const bar = el("div", "progress");
       const fill = el("i");
       fill.style.width = `${Math.min(100, job.percent || 0)}%`;
-      bar.append(fill, el("span", null, `${(job.percent || 0).toFixed(1)} %`));
+      bar.append(fill);
       card.append(bar);
 
-      const meta = el("div", "meta");
-      if (job.speed) meta.append(el("span", null, fmtSpeed(job.speed)));
-      if (job.eta) meta.append(el("span", null, `осталось ${fmtEta(job.eta)}`));
-      if (job.total) meta.append(el("span", null, fmtSize(job.total)));
-      card.append(meta);
+      const stats = el("div", "stats");
+      stats.append(el("span", "pct", `${(job.percent || 0).toFixed(0)} %`));
+      if (job.speed) stats.append(el("span", null, fmtSpeed(job.speed)));
+      if (job.total) stats.append(el("span", null, fmtSize(job.total)));
+      const right = el("span", "spacer", job.eta ? `осталось ${fmtEta(job.eta)}` : "");
+      stats.append(right);
+      card.append(stats);
 
       const row = el("div", "row");
-      const cancel = el("button", "ghost danger", "Отменить");
+      const cancel = el("button", "ghost danger");
+      cancel.append(icon("x"), el("span", null, "Отменить"));
       cancel.addEventListener("click", () => send("cancel", { jobId: job.id }).catch(showAlert));
       row.append(cancel);
       card.append(row);
     } else if (job.status === "error") {
-      card.append(el("div", "err", job.error || "не получилось"));
+      const s = el("div", "state");
+      s.append(icon("alert"), el("span", null, "не получилось"));
+      card.append(s);
+      card.append(el("div", "err", job.error || ""));
       card.append(hideRow(job.id));
     } else if (job.status === "cancelled") {
-      card.append(el("div", "sub", "отменено"));
+      const s = el("div", "state");
+      s.append(icon("pause"), el("span", null, "отменено"));
+      card.append(s);
       card.append(hideRow(job.id));
     } else {
-      card.append(el("div", "done-mark", "готово"));
+      const s = el("div", "state done");
+      s.append(icon("check"), el("span", null, "готово"));
+      card.append(s);
       card.append(hideRow(job.id));
     }
 
     box.append(card);
-  }
+  });
 }
 
 function hideRow(jobId) {
   const row = el("div", "row");
-  const b = el("button", "ghost", "Убрать");
+  const b = el("button", "ghost");
+  b.append(icon("x"), el("span", null, "Убрать"));
   b.addEventListener("click", () => send("hide-job", { jobId }).catch(showAlert));
   row.append(b);
   return row;
 }
 
 function modeTag(mode) {
-  return mode === "a" ? "ЗВУК" : mode === "v" ? "ВИДЕО" : "A+V";
+  return mode === "a" ? "ЗВУК" : mode === "v" ? "БЕЗ ЗВУКА" : "ВИДЕО";
 }
 
 function renderHistory() {
@@ -272,34 +377,39 @@ function renderHistory() {
   const box = $("#history");
   box.replaceChildren();
 
-  for (const h of list.slice(0, 15)) {
+  list.slice(0, 15).forEach((h, i) => {
     const card = el("div", "card");
+    stagger(card, `h:${h.id}`, i);
+
     const head = el("div", "card-head");
     const t = el("div", "title");
     t.append(el("div", null, h.name));
-    t.append(el("div", "sub", `${h.site || ""} ${h.size ? "· " + fmtSize(h.size) : ""}`.trim()));
+    t.append(el("div", "sub", [h.site, h.size ? fmtSize(h.size) : ""].filter(Boolean).join(" · ")));
     head.append(t);
     card.append(head);
 
     const row = el("div", "row");
-    const play = el("button", "ghost", "Играть");
-    play.addEventListener("click", () => send("play", { path: h.file }).catch(showAlert));
-    const folder = el("button", "ghost", "Папка");
-    folder.addEventListener("click", () => send("open-folder", { path: h.file }).catch(showAlert));
-    const del = el("button", "ghost danger", "Удалить");
-    del.addEventListener("click", async () => {
+    row.append(
+      historyButton("play", "Играть", () => send("play", { path: h.file })),
+      historyButton("folder", "Папка", () => send("open-folder", { path: h.file })),
+    );
+    const del = historyButton("trash", "Удалить", async () => {
       if (!confirm(`Удалить файл «${h.name}» с диска?`)) return;
-      try {
-        await send("delete-file", { path: h.file });
-        await refresh();
-      } catch (e) {
-        showAlert(e.message);
-      }
+      await send("delete-file", { path: h.file });
+      await refresh();
     });
-    row.append(play, folder, del);
+    del.classList.add("danger");
+    row.append(del);
     card.append(row);
     box.append(card);
-  }
+  });
+}
+
+function historyButton(name, label, action) {
+  const b = el("button", "ghost");
+  b.append(icon(name), el("span", null, label));
+  b.addEventListener("click", () => Promise.resolve(action()).catch(showAlert));
+  return b;
 }
 
 function shortUrl(url) {
@@ -340,21 +450,15 @@ async function checkHealth() {
       text.textContent = "помощника нет";
       const a = $("#alert");
       a.replaceChildren(
-        el(
-          "div",
-          null,
-          "Помощник не отвечает. Он ставится один раз — запусти установщик из папки проекта:",
-        ),
+        el("div", null, "Помощник не отвечает. Он ставится один раз — запусти установщик:"),
         el("code", null, "Видеолов\\helper\\установить.bat"),
       );
       a.hidden = false;
       return;
     }
     text.textContent = "не хватает программ";
-    const a = $("#alert");
     const miss = [!h.ytdlp && "yt-dlp", !h.ffmpeg && "ffmpeg"].filter(Boolean).join(" и ");
-    a.replaceChildren(el("div", null, `Помощник работает, но не нашёл ${miss}.`));
-    a.hidden = false;
+    showAlert(`Помощник работает, но не нашёл ${miss}.`);
   } catch (e) {
     box.classList.add("bad");
     text.textContent = "помощника нет";

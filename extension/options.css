@@ -1,74 +1,219 @@
+/* Страница настроек. Живёт на токенах popup.css — одно оформление на всё. */
+
 body.page {
   width: auto;
-  max-width: 720px;
   max-height: none;
+  padding: 0;
+}
+
+.wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 620px;
   margin: 0 auto;
-  padding: 28px 24px 60px;
+  padding: 40px 24px 80px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-bottom: var(--s6);
+}
+.head .mark {
+  width: 34px;
+  height: 34px;
 }
 
 h1 {
+  margin: 0;
   font-size: 20px;
-  margin: 0 0 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.lead {
+  margin: 2px 0 0;
+  color: var(--fg-faint);
+  font-size: 12.5px;
+}
+
+.wrap .card {
+  padding: var(--s5);
+  animation: none;
+}
+.wrap .card + .card {
+  margin-top: var(--s3);
 }
 
 h3 {
-  margin: 0 0 6px;
+  margin: 0 0 var(--s1);
   font-size: 14px;
-}
-
-.card + .card {
-  margin-top: 14px;
-}
-
-.hint {
-  color: var(--dim);
-  font-size: 12px;
-  margin: 0 0 10px;
-}
-
-.hint b {
-  color: var(--text);
   font-weight: 600;
 }
 
-.check {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 10px;
-  font-size: 12.5px;
-  cursor: pointer;
+.hint {
+  margin: 0 0 var(--s3);
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 1.55;
 }
-
-.check i {
-  color: var(--dim);
-  font-style: normal;
+.hint b {
+  color: var(--fg);
+  font-weight: 500;
 }
-
-input[type="range"] {
-  flex: 1;
-  accent-color: var(--accent);
-}
-
-.val {
-  min-width: 2.5em;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
+.mono {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11.5px;
+  word-break: break-word;
 }
 
 #folder {
   flex: 1;
-  min-width: 260px;
+  min-width: 240px;
+  color: var(--fg-muted);
 }
+
+/* ------------------------------------------------------------ переключатель */
+
+.switch-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  margin-top: var(--s4);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 22px;
+  margin-top: 1px;
+}
+.switch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.switch i {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  transition:
+    background var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
+  pointer-events: none;
+}
+.switch i::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition:
+    transform var(--slow) var(--ease),
+    background var(--fast) var(--ease);
+}
+.switch input:checked + i {
+  background: var(--accent);
+  border-color: var(--accent-hi);
+}
+.switch input:checked + i::after {
+  transform: translateX(16px);
+  background: #fff;
+}
+.switch input:focus-visible + i {
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.switch-text {
+  font-size: 13px;
+  line-height: 1.45;
+}
+.switch-text .hint {
+  display: block;
+  margin: 2px 0 0;
+  font-size: 11.5px;
+}
+
+/* ------------------------------------------------------------------ ползунок */
+
+.slider-row {
+  gap: var(--s4);
+}
+
+input[type="range"] {
+  flex: 1;
+  height: 22px;
+  appearance: none;
+  background: none;
+  cursor: pointer;
+}
+/* Пройденная часть дорожки закрашена: иначе по одному бегунку не понять,
+   много выбрано или мало. Долю ставит options.js в --fill. */
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--accent) var(--fill, 50%),
+    rgba(0, 0, 0, 0.4) var(--fill, 50%)
+  );
+  border: 1px solid var(--border);
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  border: none;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.5),
+    0 0 10px var(--accent-glow);
+  transition: transform var(--fast) var(--ease);
+}
+input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+input[type="range"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--accent-glow);
+}
+
+.val {
+  min-width: 2.2em;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------- отклик */
 
 .saved {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
-  background: var(--ok);
-  color: #06210f;
-  padding: 8px 14px;
-  border-radius: 8px;
-  font-weight: 600;
+  right: 24px;
+  bottom: 24px;
+  z-index: 5;
+  margin: 0;
+  padding: 9px 16px;
+  border-radius: var(--radius-pill);
+  background: rgba(63, 185, 80, 0.14);
+  border: 1px solid rgba(63, 185, 80, 0.35);
+  color: #8ce99a;
   font-size: 12px;
+  font-weight: 500;
+  box-shadow: var(--shadow-pop);
+  animation: rise var(--slow) var(--ease);
 }

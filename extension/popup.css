@@ -1,190 +1,386 @@
+/* Видеолов — оформление.
+ *
+ * Стиль «Modern Dark (Cinema)»: глубокий фон без чистого чёрного, стеклянные
+ * поверхности, мягкое свечение у главной кнопки, скругление 16.
+ * Чистый #000 не берём намеренно: на OLED он даёт смазывание при прокрутке,
+ * а на обычной матрице — провал контраста у границ карточек.
+ */
+
 :root {
   color-scheme: dark;
-  --bg: #16181d;
-  --panel: #1e2128;
-  --panel-2: #262a33;
-  --line: #333845;
-  --text: #e7e9ee;
-  --dim: #99a0ae;
-  --accent: #3b82f6;
-  --accent-2: #2563eb;
-  --ok: #22c55e;
-  --warn: #f59e0b;
-  --err: #ef4444;
+
+  /* Поверхности */
+  --bg-deep: #050507;
+  --bg-base: #0a0a0f;
+  --bg-elevated: #101018;
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-hover: rgba(255, 255, 255, 0.07);
+  --glass: rgba(16, 16, 24, 0.72);
+
+  /* Текст */
+  --fg: #ededf2;
+  --fg-muted: #8a8f9c;
+  --fg-faint: #63697a;
+
+  /* Смысловые цвета */
+  --accent: #5e6ad2;
+  --accent-hi: #7c86e8;
+  --accent-glow: rgba(94, 106, 210, 0.35);
+  --ok: #3fb950;
+  --warn: #d29922;
+  --danger: #f2555a;
+
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  /* Одно движение на весь интерфейс: вход мягко тормозит, выход быстрее входа. */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --fast: 160ms;
+  --slow: 260ms;
+
+  /* Шаг сетки 4 пикселя */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
 }
 
 * {
   box-sizing: border-box;
 }
 
+/* ⚠ Атрибут hidden — это всего лишь display:none из стилей браузера, и любой
+ * собственный display его перебивает. Пустое состояние с display:flex из-за
+ * этого показывалось ОДНОВРЕМЕННО с найденным видео. Поймано 16.09.2026. */
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   width: 400px;
+  min-height: 260px;
   max-height: 600px;
   overflow-y: auto;
-  background: var(--bg);
-  color: var(--text);
-  font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
+  overflow-x: hidden;
+  background: linear-gradient(180deg, var(--bg-base) 0%, var(--bg-deep) 100%);
+  color: var(--fg);
+  font:
+    400 13px/1.5 "Segoe UI Variable Text",
+    "Segoe UI",
+    Inter,
+    system-ui,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
 }
+
+/* Рассеянный свет. Не анимируется: в окне расширения вечное тихое движение
+   на периферии зрения раздражает, а пользы не даёт. */
+.ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.blob {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  filter: blur(48px);
+}
+.blob-1 {
+  width: 260px;
+  height: 260px;
+  top: -110px;
+  right: -80px;
+  background: rgba(94, 106, 210, 0.16);
+}
+.blob-2 {
+  width: 220px;
+  height: 220px;
+  bottom: -120px;
+  left: -90px;
+  background: rgba(124, 134, 232, 0.09);
+}
+
+/* ------------------------------------------------------------------ шапка */
 
 .bar {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 3;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(140%);
+  border-bottom: 1px solid var(--border);
+}
+
+.mark {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  filter: drop-shadow(0 2px 6px var(--accent-glow));
 }
 
 .logo {
   font-weight: 600;
   font-size: 14px;
+  letter-spacing: -0.01em;
 }
 
 .health {
   margin-left: auto;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  border: 1px solid var(--border);
   font-size: 11px;
-  color: var(--dim);
+  color: var(--fg-muted);
+  white-space: nowrap;
 }
-
 .dot {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: var(--dim);
+  background: var(--fg-faint);
+  flex: none;
 }
 .health.ok .dot {
   background: var(--ok);
+  box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.16);
 }
 .health.bad .dot {
-  background: var(--err);
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(242, 85, 90, 0.16);
 }
 
-.icon {
-  background: none;
-  border: none;
-  color: var(--dim);
-  font-size: 16px;
+/* Кнопки-иконки. 32×32 — норма для настольного интерфейса; правило 44 пикселей
+   написано для пальца, здесь целятся мышью. */
+.icon-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
   cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 6px;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
-.icon:hover {
-  background: var(--panel-2);
-  color: var(--text);
+.icon-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border);
+  color: var(--fg);
 }
+.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* --------------------------------------------------------------- сообщения */
 
 .alert {
-  margin: 10px 12px 0;
-  padding: 9px 11px;
-  border-radius: 8px;
-  background: #3a1d1d;
-  border: 1px solid #5b2a2a;
-  color: #ffd9d9;
+  position: relative;
+  z-index: 1;
+  margin: var(--s3) var(--s4) 0;
+  padding: var(--s3);
+  border-radius: var(--radius-sm);
+  background: rgba(242, 85, 90, 0.1);
+  border: 1px solid rgba(242, 85, 90, 0.28);
+  color: #ffd7d8;
   font-size: 12px;
+  line-height: 1.5;
 }
 .alert code {
   display: block;
-  margin-top: 6px;
-  padding: 6px;
-  background: #00000055;
-  border-radius: 5px;
+  margin-top: var(--s2);
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: "Cascadia Mono", Consolas, monospace;
   font-size: 11px;
+  color: #ffe9ea;
   word-break: break-all;
 }
 
+/* ---------------------------------------------------------------- разделы */
+
 main {
-  padding: 8px 12px 14px;
+  position: relative;
+  z-index: 1;
+  padding: var(--s3) var(--s4) var(--s5);
 }
 
 section + section {
-  margin-top: 14px;
+  margin-top: var(--s5);
 }
 
 h2 {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 8px 0 8px;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dim);
+  gap: var(--s2);
+  margin: 0 0 var(--s3);
+  padding: 0 2px;
+  font-size: 10.5px;
   font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
 }
 
-.count {
-  color: var(--accent);
+.chip {
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: rgba(94, 106, 210, 0.18);
+  border: 1px solid rgba(94, 106, 210, 0.3);
+  color: var(--accent-hi);
+  font-size: 10px;
+  letter-spacing: 0;
 }
 
 .link {
   margin-left: auto;
-  background: none;
+  padding: 2px 4px;
   border: none;
-  color: var(--dim);
-  font-size: 11px;
+  border-radius: 6px;
+  background: none;
+  color: var(--fg-faint);
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
   text-transform: none;
-  letter-spacing: 0;
   cursor: pointer;
-  text-decoration: underline;
+  transition: color var(--fast) var(--ease);
 }
 .link:hover {
-  color: var(--text);
+  color: var(--fg);
 }
 
+/* ------------------------------------------------------------- пустой вид */
+
 .empty {
-  color: var(--dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s6) var(--s4);
+  text-align: center;
+  color: var(--fg-faint);
   font-size: 12px;
-  margin: 6px 0;
+  line-height: 1.6;
 }
+.empty svg {
+  width: 34px;
+  height: 34px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+  opacity: 0.45;
+}
+.empty p {
+  margin: 0;
+}
+
+/* --------------------------------------------------------------- карточки */
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--s2);
 }
 
 .card {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px;
+  position: relative;
+  padding: var(--s3);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  transition:
+    border-color var(--fast) var(--ease),
+    background var(--fast) var(--ease);
+  /* Появление со сдвигом снизу: новое приходит «из глубины». */
+  animation: rise var(--slow) var(--ease) backwards;
+}
+.card:hover {
+  border-color: var(--border-strong);
+}
+/* Блик по верхней грани — из-за него карточка читается как объём, а не заливка. */
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 .card-head {
   display: flex;
-  gap: 8px;
+  gap: var(--s2);
   align-items: flex-start;
 }
 
 .tag {
   flex: none;
+  margin-top: 1px;
   padding: 2px 6px;
-  border-radius: 5px;
-  background: var(--panel-2);
-  color: var(--accent);
-  font-size: 10px;
+  border-radius: 6px;
+  background: rgba(94, 106, 210, 0.16);
+  color: var(--accent-hi);
+  font-size: 9.5px;
   font-weight: 700;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
 }
 
 .title {
   flex: 1;
   min-width: 0;
-  word-break: break-word;
+}
+.title > div:first-child {
   font-size: 12.5px;
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .sub {
-  color: var(--dim);
-  font-size: 11px;
   margin-top: 2px;
+  color: var(--fg-faint);
+  font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -192,110 +388,253 @@ h2 {
 
 .row {
   display: flex;
-  gap: 6px;
+  gap: var(--s2);
   align-items: center;
-  margin-top: 8px;
+  margin-top: var(--s3);
   flex-wrap: wrap;
 }
 
-input[type="text"],
-select {
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 6px 8px;
-  font: inherit;
-  font-size: 12px;
-  min-width: 0;
-}
-
-input[type="text"] {
+/* Ряд «качество + кнопка»: выпадашка тянется, кнопка держит свой размер. */
+.row.split select {
   flex: 1;
 }
 
+/* ------------------------------------------------------------ поля и кнопки */
+
+input[type="text"],
+select {
+  height: 32px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  min-width: 0;
+  transition:
+    border-color var(--fast) var(--ease),
+    box-shadow var(--fast) var(--ease);
+}
+input[type="text"] {
+  flex: 1;
+}
 select {
   cursor: pointer;
+  padding-right: 6px;
+}
+input[type="text"]:hover,
+select:hover {
+  border-color: var(--border-strong);
+}
+input[type="text"]:focus-visible,
+select:focus-visible,
+button:focus-visible,
+.link:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Переключатель режима: три состояния в одной пилюле — понятнее выпадашки,
+   потому что все варианты видны сразу. */
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+}
+.seg button {
+  padding: 0 9px;
+  height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease);
+}
+.seg button:hover {
+  color: var(--fg);
+}
+.seg button[aria-pressed="true"] {
+  background: var(--surface-hover);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 button.go {
-  background: var(--accent-2);
-  color: #fff;
+  height: 32px;
+  padding: 0 14px;
   border: none;
-  border-radius: 7px;
-  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  color: #fff;
   font: inherit;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
+  /* Свечение под главной кнопкой — единственный акцент такого рода в окне. */
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 4px 14px var(--accent-glow);
+  transition:
+    transform var(--fast) var(--ease),
+    filter var(--fast) var(--ease);
 }
 button.go:hover {
-  background: var(--accent);
+  filter: brightness(1.08);
+}
+button.go:active {
+  transform: scale(0.97);
 }
 button.go:disabled {
   opacity: 0.5;
+  box-shadow: none;
   cursor: default;
 }
 
 button.ghost {
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
   font: inherit;
   font-size: 11.5px;
   cursor: pointer;
+  transition:
+    background var(--fast) var(--ease),
+    color var(--fast) var(--ease),
+    border-color var(--fast) var(--ease);
 }
 button.ghost:hover {
-  border-color: var(--accent);
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+button.ghost svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 button.ghost.danger:hover {
-  border-color: var(--err);
-  color: #ffb4b4;
+  border-color: rgba(242, 85, 90, 0.4);
+  color: #ff9a9d;
 }
+button.ghost .chev {
+  transition: transform var(--slow) var(--ease);
+}
+button.ghost[aria-expanded="true"] .chev {
+  transform: rotate(180deg);
+}
+
+/* ---------------------------------------------------------------- прогресс */
 
 .progress {
   position: relative;
-  height: 18px;
-  border-radius: 6px;
-  background: var(--panel-2);
+  height: 6px;
+  margin-top: var(--s3);
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.35);
   overflow: hidden;
-  margin-top: 8px;
 }
 .progress i {
   position: absolute;
   inset: 0 auto 0 0;
-  background: linear-gradient(90deg, var(--accent-2), var(--accent));
-  transition: width 0.3s;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-hi));
+  box-shadow: 0 0 12px var(--accent-glow);
+  transition: width var(--slow) var(--ease);
 }
-.progress span {
+/* Бегущий блик: видно, что дело живёт, даже когда проценты стоят на месте. */
+.progress i::after {
+  content: "";
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 2px #0008;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: sheen 1.6s linear infinite;
 }
 
-.meta {
+@keyframes sheen {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.stats {
   display: flex;
-  gap: 10px;
-  margin-top: 6px;
-  color: var(--dim);
+  align-items: baseline;
+  gap: var(--s2);
+  margin-top: var(--s2);
+  color: var(--fg-faint);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+}
+.stats .pct {
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+}
+.stats .spacer {
+  margin-left: auto;
 }
 
 .err {
-  margin-top: 6px;
-  color: #ffb4b4;
+  margin-top: var(--s2);
+  color: #ff9a9d;
   font-size: 11.5px;
+  line-height: 1.45;
   word-break: break-word;
 }
 
-.done-mark {
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: var(--s2);
+  font-size: 11.5px;
+  color: var(--fg-muted);
+}
+.state svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.state.done {
   color: var(--ok);
-  font-size: 11px;
+}
+
+/* Тише всего: человек попросил систему не двигать картинку — не двигаем. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

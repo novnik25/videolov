@@ -119,6 +119,9 @@ function ping() {
 function startJob(job) {
   const jobId = `j${Date.now().toString(36)}${++jobSeq}`;
   const child = ytdlp.startDownload(job, (ev) => {
+    // Убитый процесс успевает дописать хвост прогресса — не пересылаем его:
+    // на той стороне он выглядит как ожившая загрузка.
+    if (job.cancelled) return;
     const { kind, ...rest } = ev;
     event(kind, jobId, rest);
     if (kind === "done" || kind === "error") jobs.delete(jobId);

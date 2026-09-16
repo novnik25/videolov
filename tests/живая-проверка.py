@@ -9,6 +9,7 @@
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -171,6 +172,9 @@ def run(ctx, out_dir):
     health = popup.inner_text(".health-text").lower()
     check("окно докладывает о помощнике", "на месте" in health, health)
     check("находка показана в окне", popup.locator(".card").count() > 0)
+    # ⚠ Заслон: пустое состояние с display:flex перебивало атрибут hidden и
+    # показывалось вместе с найденным. Поймано глазами на снимке 16.09.2026.
+    check("пустое состояние спрятано", popup.locator("#empty").is_hidden())
     check(
         "название в окне читаемое",
         "Урок 2" in popup.inner_text(".card .title"),
@@ -183,12 +187,52 @@ def run(ctx, out_dir):
     # Раскрываем карточку: имя, режим, качество, кнопка.
     popup.locator(".card button.ghost").first.click()
     popup.wait_for_timeout(2000)
-    check("выпадашка качеств заполнилась", popup.locator(".card select").count() == 2)
-    qualities = popup.locator(".card select").nth(1).inner_text()
+    check("выпадашка качеств заполнилась", popup.locator(".card select").count() == 1)
+    qualities = popup.locator(".card select").first.inner_text()
     check("качества без повторов", qualities.count("1080p") == 1, qualities.replace("\n", " "))
     popup.screenshot(path=str(docs / "окно-выбор-качества.png"))
-    print(f"      снимки окна: {docs}")
+    check("режимы показаны все три", popup.locator(".seg button").count() == 3)
+    check(
+        "выбран режим «видео со звуком»",
+        popup.locator('.seg button[aria-pressed="true"]').inner_text() == "Видео",
+        popup.locator('.seg button[aria-pressed="true"]').inner_text(),
+    )
+    check("значки нарисованы, а не написаны", popup.locator(".card button.ghost svg").count() >= 2)
+
+    # Правка имени не должна слетать от перерисовки состояния.
+    name_input = popup.locator("input[data-name-for]")
+    name_input.click()
+    name_input.fill("Урок 2 переименованный")
+    popup.evaluate("() => chrome.runtime.sendMessage({cmd: 'state-changed'})")
+    popup.wait_for_timeout(700)
+    check(
+        "набранное имя пережило перерисовку",
+        popup.locator("input[data-name-for]").input_value() == "Урок 2 переименованный",
+        popup.locator("input[data-name-for]").input_value(),
+    )
+    name_input.fill("")
     popup.locator(".card button.ghost").first.click()  # свернуть обратно
+
+    # Страница настроек — то же оформление, свои органы управления.
+    opts = ctx.new_page()
+    opts.set_viewport_size({"width": 760, "height": 720})
+    opts.goto(f"chrome-extension://{EXT_ID}/options.html")
+    opts.wait_for_timeout(2500)
+    check("настройки открылись", opts.locator(".card").count() == 4)
+    check("помощник виден и в настройках", "yt-dlp" in opts.inner_text("#health"), opts.inner_text("#health"))
+    # Настройки обязаны показывать то, что лежит в хранилище: разойдясь,
+    # страница обещает одно, а загрузка делает другое.
+    check("формат звука совпадает с сохранённым", opts.locator("#audioFormat").input_value() == "m4a",
+          opts.locator("#audioFormat").input_value())
+    check("число потоков совпадает", opts.locator("#threads").input_value() == "16",
+          opts.locator("#threads").input_value())
+    check("папки сайта включены", opts.locator("#perSite").is_checked())
+    check("ползунок закрашен по значению",
+          opts.evaluate("() => document.querySelector('#threads').style.getPropertyValue('--fill')") != "",
+          "--fill пуст")
+    opts.screenshot(path=str(docs / "настройки.png"), full_page=True)
+    opts.close()
+    print(f"      снимки окна: {docs}")
 
     # Настройки: складываем в свою папку, чтобы не сорить в «Загрузках».
     popup.evaluate(
@@ -226,6 +270,13 @@ def run(ctx, out_dir):
         return
 
     job_id = res["data"]["jobId"]
+
+    # Снимок на ходу: полоса, скорость, остаток.
+    popup.wait_for_timeout(4000)
+    check("раздел «Качается» появился", popup.locator("#jobs-section").is_visible())
+    check("полоса прогресса рисуется", popup.locator("#jobs .progress i").count() == 1)
+    popup.screenshot(path=str(ROOT / "docs" / "окно-загрузка.png"))
+
     deadline = time.time() + 180
     job = {}
     while time.time() < deadline:
@@ -250,6 +301,49 @@ def run(ctx, out_dir):
 
     history = popup.evaluate("async () => (await chrome.storage.local.get('history')).history || []")
     check("запись попала в историю", len(history) > 0 and history[0]["file"] == str(file), history[:1])
+
+    popup.wait_for_timeout(1200)
+    check("история показана в окне", popup.locator("#history .card").count() > 0)
+    check_cancel(popup, tab_id, item)
+    check("кнопки истории со значками", popup.locator("#history .card button svg").count() >= 3)
+    popup.screenshot(path=str(ROOT / "docs" / "окно-история.png"))
+
+
+def running_ytdlp():
+    """Сколько процессов yt-dlp живо прямо сейчас."""
+    out = subprocess.run(
+        ["tasklist", "/fi", "imagename eq yt-dlp.exe", "/nh"],
+        capture_output=True, text=True, encoding="cp866", errors="replace",
+    ).stdout
+    return out.lower().count("yt-dlp.exe")
+
+
+def check_cancel(popup, tab_id, item):
+    """Отмена обязана убить и yt-dlp, и запущенный им ffmpeg."""
+    res = popup.evaluate(
+        """async ({tabId, itemId}) => new Promise((r) =>
+      chrome.runtime.sendMessage(
+        {tabId, itemId, cmd: "download", name: "Отменяемая", mode: "av", height: 1080}, r))""",
+        {"tabId": tab_id, "itemId": item["id"]},
+    )
+    if not res.get("ok"):
+        check("вторая загрузка началась", False, res.get("error"))
+        return
+    job_id = res["data"]["jobId"]
+    popup.wait_for_timeout(4000)
+    check("процесс загрузки запущен", running_ytdlp() > 0, "yt-dlp не найден в списке процессов")
+
+    popup.evaluate(
+        """async (jobId) => new Promise((r) =>
+      chrome.runtime.sendMessage({cmd: "cancel", jobId}, r))""",
+        job_id,
+    )
+    popup.wait_for_timeout(2500)
+    jobs = popup.evaluate("async () => (await chrome.storage.session.get('jobs')).jobs || {}")
+    check("загрузка помечена отменённой", jobs.get(job_id, {}).get("status") == "cancelled",
+          jobs.get(job_id))
+    check("процесс убит, а не брошен", running_ytdlp() == 0,
+          f"живых yt-dlp: {running_ytdlp()}")
 
 
 if __name__ == "__main__":

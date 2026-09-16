@@ -6,33 +6,65 @@
     <title>Видеолов</title>
   </head>
   <body>
+    <!-- Рассеянный свет за содержимым. aria-hidden: смысла не несёт. -->
+    <div class="ambient" aria-hidden="true">
+      <i class="blob blob-1"></i>
+      <i class="blob blob-2"></i>
+    </div>
+
     <header class="bar">
+      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="11" fill="url(#g)" />
+        <path d="M10 8.5l6 3.5-6 3.5z" fill="#fff" />
+        <defs>
+          <linearGradient id="g" x1="0" y1="0" x2="0" y2="24">
+            <stop offset="0" stop-color="#7C86E8" />
+            <stop offset="1" stop-color="#4C57BE" />
+          </linearGradient>
+        </defs>
+      </svg>
       <span class="logo">Видеолов</span>
-      <span id="health" class="health" title="Состояние помощника">
-        <i class="dot"></i><span class="health-text">проверяю…</span>
+
+      <span id="health" class="health" role="status">
+        <i class="dot" aria-hidden="true"></i><span class="health-text">проверяю…</span>
       </span>
-      <button id="settings" class="icon" title="Настройки">⚙</button>
+
+      <button id="settings" class="icon-btn" aria-label="Настройки" title="Настройки">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+          />
+        </svg>
+      </button>
     </header>
 
-    <div id="alert" class="alert" hidden></div>
+    <div id="alert" class="alert" role="alert" hidden></div>
 
     <main>
       <section>
-        <h2>На этой странице <span id="found-count" class="count"></span></h2>
+        <h2>
+          <span>На этой странице</span>
+          <span id="found-count" class="chip" hidden></span>
+        </h2>
         <div id="found" class="list"></div>
-        <p id="empty" class="empty">
-          Пока ничего не нашлось. Запусти видео на странице — поток появится здесь.
-        </p>
+        <div id="empty" class="empty">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="2" y="5" width="20" height="14" rx="3" />
+            <path d="M10 10l5 2.5-5 2.5z" />
+          </svg>
+          <p>Пока ничего не нашлось.<br />Запусти видео на странице — поток появится здесь.</p>
+        </div>
       </section>
 
       <section id="jobs-section" hidden>
-        <h2>Качается</h2>
+        <h2><span>Качается</span></h2>
         <div id="jobs" class="list"></div>
       </section>
 
       <section id="history-section" hidden>
         <h2>
-          Завершено
+          <span>Завершено</span>
           <button id="clear-history" class="link">очистить</button>
         </h2>
         <div id="history" class="list"></div>

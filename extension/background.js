@@ -340,6 +340,12 @@ helper.onEvent(async (ev) => {
   }
 
   if (ev.kind === "progress") {
+    // ⚠ Отменённую загрузку воскрешать нельзя. yt-dlp успевает выплюнуть
+    // последние строки прогресса уже после того, как его убили, и они
+    // возвращали карточке вид «качается» — навсегда, потому что больше
+    // событий не будет. Поймано живой проверкой 16.09.2026.
+    const current = (await store.getJobs())[ev.jobId];
+    if (!current || current.status !== "running") return;
     await store.putJob({
       id: ev.jobId,
       status: "running",
