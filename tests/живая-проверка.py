@@ -81,9 +81,16 @@ def main():
         # 137-й версии выбросил поддержку --load-extension совсем: расширение
         # просто не загружается, список на chrome://extensions пуст, ошибок нет.
         # Проверено на Chrome 152 — ни один флаг не возвращает её обратно.
+        # ⚠ По умолчанию НЕВИДИМО. Окно проверки выскакивает поверх работы
+        # человека и сбивает его; показывать браузер — только по явной просьбе:
+        #   VIDEOLOV_SHOW=1 python tests/живая-проверка.py
+        # ⚠ channel="chromium" обязателен: в невидимом режиме Playwright по
+        # умолчанию берёт УРЕЗАННУЮ сборку (chromium_headless_shell), которая
+        # расширения не поддерживает вовсе — служебный скрипт не поднимается.
         ctx = p.chromium.launch_persistent_context(
             profile,
-            headless=False,
+            channel="chromium",
+            headless=os.environ.get("VIDEOLOV_SHOW") != "1",
             args=[
                 f"--disable-extensions-except={EXT}",
                 f"--load-extension={EXT}",
@@ -148,6 +155,7 @@ def run(ctx, out_dir):
     )
     check("вкладка найдена фоновым скриптом", tab_id is not None, tab_id)
 
+
     found = sw.evaluate(
         "async (id) => (await chrome.storage.session.get(`found:${id}`))[`found:${id}`] || []",
         tab_id,
@@ -169,6 +177,18 @@ def run(ctx, out_dir):
     popup.set_viewport_size({"width": 400, "height": 600})
     popup.goto(f"chrome-extension://{EXT_ID}/popup.html?tab={tab_id}")
     popup.wait_for_timeout(2500)
+    # ⚠ Самопроверку спрашиваем СО СТРАНИЦЫ расширения: служебный скрипт
+    # собственных сообщений не получает, и из него ответ всегда пустой.
+    self_check = popup.evaluate(
+        """async () => new Promise((r) => chrome.runtime.sendMessage({cmd: "selfcheck"}, r))"""
+    )
+    sc = (self_check or {}).get("data", {}) if (self_check or {}).get("ok") else {}
+    check("перехватчик подключён", sc.get("listenerOn") is True, self_check)
+    check("подписка по заголовкам жива", sc.get("headersListenerOn") is True, sc.get("headersListenerOn"))
+    check("запросы доходят до расширения", (sc.get("lastRequestAt") or 0) > 0, sc.get("lastRequestAt"))
+    check("область хранения выбрана проверкой", bool(sc.get("storage", {}).get("probe")), sc.get("storage"))
+    print(f"      хранилище: {sc.get('storage', {}).get('probe')}")
+
     health = popup.inner_text(".health-text").lower()
     check("окно докладывает о помощнике", "на месте" in health, health)
     check("находка показана в окне", popup.locator(".card").count() > 0)

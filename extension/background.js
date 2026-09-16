@@ -9,23 +9,69 @@ import {
   sourceLabel,
 } from "./lib/detect.js";
 import * as sightings from "./lib/sightings.js";
+import * as area from "./lib/area.js";
 import { toFileName, nameFromUrl, siteFolder } from "./lib/title.js";
 import * as store from "./lib/store.js";
 import * as helper from "./lib/helper.js";
 import { probeHls, qualityLabel } from "./lib/hls.js";
 
+/* ------------------------------------------------- подписки первым делом ---
+ *
+ * ⚠ Manifest V3 запоминает, на какие события расширение подписано, по ПЕРВОМУ
+ * запуску служебного скрипта — и будит его потом только ради них. Подписка,
+ * сделанная позже (после await, из обработчика, из лениво загруженного модуля),
+ * браузером не учитывается: скрипт спит, события проходят мимо, а снаружи это
+ * выглядит как «расширение ничего не находит».
+ *
+ * Поэтому здесь стоят ПУСТЫЕ подписки — до всякой другой работы. Настоящие
+ * обработчики добавляются ниже. Тот же приём применяет Video DownloadHelper,
+ * который на этом браузере работает (разобран 16.09.2026).
+ */
+const WEB_FILTER = {
+  urls: ["<all_urls>"],
+  types: ["media", "xmlhttprequest", "object", "other"],
+};
+chrome.webRequest.onBeforeRequest.addListener(() => {}, WEB_FILTER);
+chrome.webRequest.onResponseStarted.addListener(() => {}, WEB_FILTER, ["responseHeaders"]);
+chrome.webRequest.onHeadersReceived.addListener(() => {}, WEB_FILTER, ["responseHeaders"]);
+chrome.runtime.onMessage.addListener(() => {});
+chrome.tabs.onUpdated.addListener(() => {});
+chrome.tabs.onRemoved.addListener(() => {});
+chrome.tabs.onActivated.addListener(() => {});
+
 const MAX_PER_TAB = 30;
+
+/* ------------------------------------------------------------ самопроверка */
+
+// ⚠ Всё это пишется в chrome.storage.local — она есть всегда. Смысл в том,
+// чтобы отличить «перехват не сработал» от «сработал, но запись потерялась»:
+// обе беды выглядят как пустой список, а первая живёт в браузере, вторая — в
+// хранилище. Метка последнего запроса переживает перезапуск служебного скрипта.
+const bootAt = Date.now();
+let lastRequestWrite = 0;
+
+chrome.storage.local
+  .get(["swStarts"])
+  .then((got) => chrome.storage.local.set({ swStarts: (got.swStarts || 0) + 1, swBootAt: bootAt }))
+  .catch(() => {});
+
+function markRequestSeen() {
+  const now = Date.now();
+  if (now - lastRequestWrite < 2000) return; // не долбим хранилище на каждый запрос
+  lastRequestWrite = now;
+  chrome.storage.local.set({ lastRequestAt: now }).catch(() => {});
+}
 
 /* ---------------------------------------------------------------- находки */
 
 /** Заголовки вкладок, присланные осмотром страницы. Кеш — переживает сон. */
 async function rememberTitle(tabId, title) {
   if (!title) return;
-  await chrome.storage.session.set({ [`title:${tabId}`]: title });
+  await area.set({ [`title:${tabId}`]: title });
 }
 
 async function tabTitle(tabId) {
-  const got = await chrome.storage.session.get(`title:${tabId}`);
+  const got = await area.get(`title:${tabId}`);
   if (got[`title:${tabId}`]) return got[`title:${tabId}`];
   try {
     const tab = await chrome.tabs.get(tabId);
@@ -73,6 +119,7 @@ async function paintBadge(tabId) {
 /** Перехват сети: основной способ увидеть поток. */
 chrome.webRequest.onBeforeRequest.addListener(
   (d) => {
+    markRequestSeen();
     const out = classifyDetailed(d.url);
     // ⚠ tabId −1 — это запрос служебного работника сайта, не вкладки. Показать
     // его негде, но в журнале он виден: иначе «перехват молчит» неотличимо от
@@ -96,7 +143,24 @@ chrome.webRequest.onBeforeRequest.addListener(
       );
     })();
   },
-  { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "object", "other"] },
+  WEB_FILTER,
+);
+
+/**
+ * Третий заход — момент, когда ответ пошёл.
+ * Ловит то, что не видно по адресу: тип содержимого известен, а сам запрос
+ * заведомо состоялся. Именно на этом событии построен VDH.
+ */
+chrome.webRequest.onResponseStarted.addListener(
+  (d) => {
+    markRequestSeen();
+    if (d.tabId < 0) return;
+    const ct = (d.responseHeaders || []).find((h) => h.name.toLowerCase() === "content-type");
+    const hit = classify(d.url, ct?.value || "");
+    if (hit) void record(d.tabId, hit, d.initiator || "");
+  },
+  WEB_FILTER,
+  ["responseHeaders"],
 );
 
 /** Второй заход — по Content-Type: бывают потоки без расширения в адресе. */
@@ -107,7 +171,7 @@ chrome.webRequest.onHeadersReceived.addListener(
     const hit = classify(d.url, ct?.value || "");
     if (hit) void record(d.tabId, hit, d.initiator || "");
   },
-  { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "object", "other"] },
+  WEB_FILTER,
   ["responseHeaders"],
 );
 
@@ -189,14 +253,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.tabs.onUpdated.addListener(async (tabId, info) => {
   if (info.status === "loading" && info.url) {
     await store.clearFound(tabId);
-    await chrome.storage.session.remove(`title:${tabId}`);
+    await area.remove(`title:${tabId}`);
     await paintBadge(tabId);
     notifyPopup();
   }
 });
 chrome.tabs.onRemoved.addListener(async (tabId) => {
   await store.clearFound(tabId);
-  await chrome.storage.session.remove(`title:${tabId}`);
+  await area.remove(`title:${tabId}`);
 });
 chrome.tabs.onActivated.addListener(({ tabId }) => void paintBadge(tabId));
 
@@ -280,6 +344,30 @@ async function handlePopup(msg) {
 
     case "sightings":
       return sightings.readLog();
+
+    case "selfcheck": {
+      const local = await chrome.storage.local.get(["swStarts", "lastRequestAt", "swBootAt"]);
+      let granted = null;
+      try {
+        granted = await chrome.permissions.getAll();
+      } catch (e) {
+        granted = { error: String(e.message || e) };
+      }
+      return {
+        // Зарегистрирован ли перехватчик прямо сейчас. Если false — виноват
+        // не сайт и не разбор, а сам запуск служебного скрипта.
+        webRequestApi: typeof chrome.webRequest,
+        listenerOn: Boolean(chrome.webRequest?.onBeforeRequest?.hasListeners?.()),
+        headersListenerOn: Boolean(chrome.webRequest?.onHeadersReceived?.hasListeners?.()),
+        swStarts: local.swStarts || 0,
+        swAliveSec: Math.round((Date.now() - bootAt) / 1000),
+        lastRequestAt: local.lastRequestAt || 0,
+        storage: await area.describe(),
+        manifestPermissions: chrome.runtime.getManifest().permissions,
+        grantedPermissions: granted,
+        browser: navigator.userAgent,
+      };
+    }
 
     case "clear-sightings":
       await sightings.clearLog();

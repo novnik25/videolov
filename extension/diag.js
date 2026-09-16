@@ -126,9 +126,35 @@ function stat(name, value) {
 }
 
 async function reload() {
-  const [log, tabs] = await Promise.all([send("sightings"), send("tabs-overview")]);
-  snapshot = { log, tabs: tabs.tabs };
+  const [log, tabs, self] = await Promise.all([
+    send("sightings"),
+    send("tabs-overview"),
+    send("selfcheck").catch((e) => ({ error: String(e.message || e) })),
+  ]);
+  snapshot = { log, tabs: tabs.tabs, self };
   render(log, tabs.tabs);
+  renderSelf(self);
+}
+
+/** Самопроверка: подключён ли перехватчик и работает ли хранилище. */
+function renderSelf(s) {
+  const box = $("#self");
+  if (s.error) {
+    box.textContent = `самопроверка не ответила: ${s.error}`;
+    return;
+  }
+  const ago = s.lastRequestAt ? `${Math.round((Date.now() - s.lastRequestAt) / 1000)} с назад` : "НИКОГДА";
+  const lines = [
+    `перехватчик: ${s.listenerOn ? "подключён" : "НЕ ПОДКЛЮЧЁН"} (по заголовкам: ${s.headersListenerOn ? "да" : "НЕТ"})`,
+    `chrome.webRequest: ${s.webRequestApi}`,
+    `последний замеченный запрос: ${ago}`,
+    `служебный скрипт: запусков ${s.swStarts}, текущий живёт ${s.swAliveSec} с`,
+    `хранилище сеанса: ${s.storage.probe}${s.storage.fallback ? " → работаю через local" : ""}`,
+    `права в манифесте: ${(s.manifestPermissions || []).join(", ")}`,
+    `права выданы: ${JSON.stringify(s.grantedPermissions)}`,
+    `браузер: ${s.browser}`,
+  ];
+  box.replaceChildren(...lines.map((l) => el("div", null, l)));
 }
 
 function asText() {
@@ -149,6 +175,18 @@ function asText() {
     "--- примеры кусков потока ---",
     ...log.samples,
     "",
+    "--- самопроверка ---",
+    ...(snapshot.self && !snapshot.self.error
+      ? [
+          `перехватчик подключён: ${snapshot.self.listenerOn}`,
+          `последний запрос: ${snapshot.self.lastRequestAt || "никогда"}`,
+          `запусков служебного скрипта: ${snapshot.self.swStarts}`,
+          `хранилище: ${snapshot.self.storage.probe}${snapshot.self.storage.fallback ? " (через local)" : ""}`,
+          `права выданы: ${JSON.stringify(snapshot.self.grantedPermissions)}`,
+          `браузер: ${snapshot.self.browser}`,
+        ]
+      : [`самопроверка: ${snapshot.self?.error || "нет"}`]),
+    "",
     "--- что видел перехватчик (свежее сверху) ---",
     ...log.entries.slice(0, 80).map((e) => `${e.taken ? "ВИДЕО" : e.verdict} | ${e.type} | ${e.url}`),
   ];
@@ -168,3 +206,7 @@ $("#copy").addEventListener("click", async () => {
 });
 
 void reload();
+
+// Страница обновляется сама: человек уходит смотреть видео и возвращается к
+// готовым числам, а не гадает, нажал ли он кнопку.
+setInterval(() => void reload().catch(() => {}), 2000);

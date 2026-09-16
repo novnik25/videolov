@@ -5,7 +5,12 @@
 // chrome.storage.session (умирает вместе с браузером — ровно тот срок, что нужен),
 // а настройки и история загрузок — в chrome.storage.local.
 
-const SESSION = chrome.storage.session;
+// ⚠ Не chrome.storage.session напрямую: она есть не во всех сборках и может
+// молча не сохранять. Тогда список найденного всегда читается пустым — ровно
+// тот случай, когда «расширение ничего не находит». Область выбирает area.js
+// после живой проверки записи.
+import * as SESSION from "./area.js";
+
 const LOCAL = chrome.storage.local;
 
 export const DEFAULT_SETTINGS = {

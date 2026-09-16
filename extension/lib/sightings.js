@@ -9,6 +9,8 @@
 // бы ровно те строки, ради которых журнал заведён. От них хватает счётчика и
 // пары примеров — они доказывают, что перехват жив.
 
+import * as area from "./area.js";
+
 const MAX = 300;
 const SEGMENT_SAMPLES = 5;
 const FLUSH_MS = 1500;
@@ -37,7 +39,7 @@ async function ensureLoaded() {
   if (loaded) return;
   loaded = true;
   try {
-    const got = await chrome.storage.session.get(["sightings", "sightSamples", "sightCounters"]);
+    const got = await area.get(["sightings", "sightSamples", "sightCounters"]);
     if (Array.isArray(got.sightings)) ring = got.sightings;
     if (Array.isArray(got.sightSamples)) segmentSamples = got.sightSamples;
     if (got.sightCounters) counters = got.sightCounters;
@@ -54,7 +56,7 @@ function flushSoon() {
     if (!dirty) return;
     dirty = false;
     try {
-      await chrome.storage.session.set({
+      await area.set({
         sightings: ring,
         sightSamples: segmentSamples,
         sightCounters: counters,
@@ -131,7 +133,7 @@ export async function clearLog() {
   ring = [];
   segmentSamples = [];
   counters = empty();
-  await chrome.storage.session.set({
+  await area.set({
     sightings: ring,
     sightSamples: segmentSamples,
     sightCounters: counters,
