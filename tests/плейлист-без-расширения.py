@@ -1,0 +1,181 @@
+# Воспроизведение живого случая: GetCourse (curs.kudryavtsevtony.ru).
+#
+# Там нет ни одной приметы, на которые обычно ловят видео:
+#   • плейлист лежит по адресу /api/playlist/master/<хеш>/<хеш>?jwt=… — без .m3u8;
+#   • отдаётся с типом application/json, а не с mpegurl;
+#   • куски называются 34.bin и лежат в /api/storage/chunk/.
+# Расширение обязано узнать плейлист ПО СОДЕРЖИМОМУ и показать ОДНУ строку —
+# мастер, а не мастер плюс каждое качество.
+#
+# Запуск: python tests/плейлист-без-расширения.py
+
+import os
+import shutil
+import sys
+import tempfile
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+
+from playwright.sync_api import sync_playwright
+
+ROOT = Path(__file__).resolve().parent.parent
+EXT = ROOT / "extension"
+EXT_ID = "bddbplfelcdknmmmbidbeecominenlcg"
+PORT = 8903
+
+H1 = "0b95479e669505fb09075d70da9ec3a0"
+H2 = "eaa19b6afc39a28d9d35814a4f19631b"
+MASTER = f"/api/playlist/master/{H1}/{H2}?user-cdn=cdnvideo&jwt=eyJ0eXAiOiJKV1Qi"
+MEDIA = f"/api/playlist/media/{H1}/{H2}/480?consumer=vod&sid="
+
+MASTER_BODY = f"""#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=854x480
+/api/playlist/media/{H1}/{H2}/480?consumer=vod&sid=
+#EXT-X-STREAM-INF:BANDWIDTH=2400000,RESOLUTION=1280x720
+/api/playlist/media/{H1}/{H2}/720?consumer=vod&sid=
+"""
+
+MEDIA_BODY = f"""#EXTM3U
+#EXT-X-TARGETDURATION:10
+#EXTINF:10.0,
+/api/storage/chunk/{H1}/{H2}/480/0.bin?host=vh-125
+#EXTINF:10.0,
+/api/storage/chunk/{H1}/{H2}/480/1.bin?host=vh-125
+#EXT-X-ENDLIST
+"""
+
+# Страница ведёт себя как плеер GetCourse: тянет мастер, затем качество,
+# затем куски — и попутно долбит служебные запросы, как настоящий сайт.
+PAGE = f"""<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<title>Урок 4. Смета которая усиливает вашу позицию</title>
+<meta property="og:title" content="Урок 4. Смета которая усиливает вашу позицию">
+</head><body><h1>Урок</h1><p id="s">…</p>
+<script>
+(async () => {{
+  const say = (t) => document.getElementById("s").textContent = t;
+  await fetch("{MASTER}");
+  await fetch("{MEDIA}");
+  for (const n of [0, 1]) await fetch(`/api/storage/chunk/{H1}/{H2}/480/${{n}}.bin?host=vh-125`);
+  await fetch("/pl/api/teach/lesson/comments");
+  await fetch("/api/save-last-seen-time/set?current-time=99");
+  await fetch("/subtitles/{H1}/internal/subtitles.vtt?version=0");
+  say("плеер отработал");
+}})();
+</script></body></html>"""
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        path = self.path
+        if path == "/":
+            return self.send(PAGE, "text/html; charset=utf-8")
+        if path.startswith("/api/playlist/master/"):
+            # ⚠ Тип НАРОЧНО неправильный: сайт отдаёт плейлист как json.
+            return self.send(MASTER_BODY, "application/json")
+        if path.startswith("/api/playlist/media/"):
+            return self.send(MEDIA_BODY, "application/json")
+        if path.startswith("/api/storage/chunk/"):
+            return self.send("двоичный кусок", "application/octet-stream")
+        return self.send("{}", "application/json")
+
+    def send(self, body, ctype):
+        data = body.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *args):
+        pass
+
+
+failures = []
+
+
+def check(name, ok, detail=""):
+    print(f"{'ok   ' if ok else 'ПЛОХО'} {name}{'' if ok else '  — ' + str(detail)}")
+    if not ok:
+        failures.append(name)
+
+
+def main():
+    server = HTTPServer(("127.0.0.1", PORT), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    profile = tempfile.mkdtemp(prefix="videolov-gc-")
+
+    with sync_playwright() as p:
+        ctx = p.chromium.launch_persistent_context(
+            profile,
+            channel="chromium",
+            headless=os.environ.get("VIDEOLOV_SHOW") != "1",
+            args=[
+                f"--disable-extensions-except={EXT}",
+                f"--load-extension={EXT}",
+                "--disable-features=DisableLoadExtensionCommandLineSwitch",
+                "--no-first-run",
+            ],
+        )
+        try:
+            run(ctx)
+        finally:
+            ctx.close()
+            shutil.rmtree(profile, ignore_errors=True)
+
+    server.shutdown()
+    print("\nПРОВАЛОВ: " + str(len(failures)) if failures else "\nвсё сошлось")
+    sys.exit(1 if failures else 0)
+
+
+def run(ctx):
+    for _ in range(50):
+        if ctx.service_workers:
+            break
+        ctx.wait_for_event("serviceworker", timeout=2000)
+    sw = ctx.service_workers[0]
+
+    page = ctx.new_page()
+    page.goto(f"http://127.0.0.1:{PORT}/", wait_until="networkidle")
+    page.wait_for_timeout(3500)
+
+    tab_id = sw.evaluate(
+        "async () => (await chrome.tabs.query({active: true, currentWindow: true}))[0].id"
+    )
+    found = sw.evaluate(
+        "async (id) => (await chrome.storage.session.get(`found:${id}`))[`found:${id}`] || []",
+        tab_id,
+    )
+    for f in found:
+        print(f"      найдено: [{f['kind']}] {f['url'][:95]}")
+
+    check("плейлист без расширения найден", len(found) > 0, "ничего не найдено")
+    if not found:
+        log = sw.evaluate(
+            "async () => (await chrome.storage.session.get('sightings')).sightings || []"
+        )
+        for e in log[-12:]:
+            print(f"      журнал: {e['verdict']} | {e['url'][:90]}")
+        return
+
+    check("ровно одна строка на урок", len(found) == 1, f"строк: {len(found)}")
+    item = found[0]
+    check("это HLS", item["kind"] == "hls", item["kind"])
+    check("выбран МАСТЕР, а не качество", "/master/" in item["url"], item["url"])
+    check(
+        "имя взято из заголовка урока",
+        item["name"].startswith("Урок 4"),
+        item["name"],
+    )
+
+    counters = sw.evaluate(
+        "async () => (await chrome.storage.session.get('sightCounters')).sightCounters || {}"
+    )
+    check("куски посчитаны как куски", counters.get("segments", 0) >= 2, counters)
+    print(f"      счётчики: {counters.get('seen')} всего, {counters.get('taken')} видео, "
+          f"{counters.get('segments')} кусков")
+
+
+if __name__ == "__main__":
+    main()

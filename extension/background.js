@@ -6,6 +6,8 @@ import {
   dedupKey,
   isInsideOf,
   isKnownSite,
+  looksMaster,
+  mediaIdentity,
   sourceLabel,
 } from "./lib/detect.js";
 import * as sightings from "./lib/sightings.js";
@@ -94,6 +96,18 @@ async function addFound(tabId, item) {
     const media = (x) => x.kind !== "page";
     if (list.some((x) => media(x) && isInsideOf(item.url, x.url))) return false;
     list = list.filter((x) => !(media(x) && isInsideOf(x.url, item.url)));
+
+    // Тот же ролик под другим адресом: у GetCourse мастер и плейлист качества
+    // лежат в разных папках, но несут одни хеши. Родства по вложенности нет —
+    // спасает только опознавательный знак. Главным считается мастер.
+    const mark = mediaIdentity(item.url);
+    if (mark) {
+      const twin = list.findIndex((x) => media(x) && mediaIdentity(x.url) === mark);
+      if (twin >= 0) {
+        if (!(looksMaster(item.url) && !looksMaster(list[twin].url))) return false;
+        list.splice(twin, 1);
+      }
+    }
   }
 
   list.unshift(item);
@@ -125,9 +139,23 @@ chrome.webRequest.onBeforeRequest.addListener(
     // ⚠ tabId −1 — это запрос служебного работника сайта, не вкладки. Показать
     // его негде, но в журнале он виден: иначе «перехват молчит» неотличимо от
     // «перехват работает, а привязать не к чему».
-    if (!out.kind || d.tabId < 0) {
-      const why = out.kind ? "вне вкладки" : out.reason;
-      void sightings.note(d.url, d.type, d.tabId, why, false, out.segment);
+    if (d.tabId < 0) {
+      void sightings.note(d.url, d.type, d.tabId, "вне вкладки", false, out.segment);
+      return;
+    }
+    // Похоже на плейлист — читаем и решаем по содержимому, а не по адресу.
+    // Проверяем только то, что запрашивалось методом GET: повторять POST своим
+    // запросом нельзя — это чужое действие, а не чтение.
+    if (out.maybe) {
+      if ((d.method || "GET").toUpperCase() === "GET") {
+        void checkMaybe(d.url, d.type, d.tabId, d.initiator || "");
+      } else {
+        void sightings.note(d.url, d.type, d.tabId, `похоже на плейлист, но ${d.method}`, false);
+      }
+      return;
+    }
+    if (!out.kind) {
+      void sightings.note(d.url, d.type, d.tabId, out.reason, false, out.segment);
       return;
     }
     // Приговор пишем ПОСЛЕ попытки добавить: «узнали формат» и «показали
@@ -175,6 +203,52 @@ chrome.webRequest.onHeadersReceived.addListener(
   WEB_FILTER,
   ["responseHeaders"],
 );
+
+/**
+ * Проверка адреса, ПОХОЖЕГО на плейлист.
+ *
+ * ⚠ Расширение .m3u8 — привычка, а не правило: GetCourse отдаёт плейлист как
+ * /api/playlist/master/<хеш>/<хеш>?jwt=…, и по адресу он неотличим от любого
+ * другого запроса к API. Поэтому решает не адрес, а содержимое: настоящий
+ * плейлист начинается с #EXTM3U. Ответ запоминается, чтобы не тянуть один и
+ * тот же адрес дважды.
+ */
+const verdicts = new Map(); // адрес → обещание с ответом
+
+function readPlaylist(url) {
+  let p = verdicts.get(url);
+  if (p) return p;
+  p = (async () => {
+    try {
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) return { kind: "", why: `ответ ${res.status}` };
+      const head = (await res.text()).slice(0, 2048);
+      if (/^\s*#EXTM3U/.test(head)) return { kind: "hls", why: "" };
+      if (/<MPD[\s>]/i.test(head)) return { kind: "dash", why: "" };
+      return { kind: "", why: "не плейлист" };
+    } catch (e) {
+      return { kind: "", why: `не прочитался: ${String(e.message || e).slice(0, 60)}` };
+    }
+  })();
+  verdicts.set(url, p);
+  return p;
+}
+
+async function checkMaybe(url, type, tabId, initiator) {
+  const { kind, why } = await readPlaylist(url);
+  if (!kind) {
+    await sightings.note(url, type, tabId, `проверен: ${why}`, false);
+    return;
+  }
+  const added = await record(tabId, { kind, url }, initiator);
+  await sightings.note(
+    url,
+    type,
+    tabId,
+    added ? `${kind} — узнан по содержимому` : "часть уже найденного видео",
+    added,
+  );
+}
 
 /** @returns {Promise<boolean>} попала ли находка в список вкладки */
 async function record(tabId, hit, initiator) {
