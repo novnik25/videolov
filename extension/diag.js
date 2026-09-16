@@ -2,6 +2,8 @@
 // страницы до строки в списке. Приговор формулируется словами — читать журнал
 // глазами не требуется.
 
+import { checkStale, restart, BUILD } from "./lib/stale.js";
+
 const $ = (s) => document.querySelector(s);
 
 function send(cmd, extra = {}) {
@@ -205,6 +207,35 @@ $("#copy").addEventListener("click", async () => {
   setTimeout(() => (n.hidden = true), 1600);
 });
 
+/** Старая начинка — первое, что нужно исправить: иначе всё ниже про неё. */
+async function guardStale() {
+  const { stale, running } = await checkStale();
+  const box = $("#stale");
+  if (!stale) {
+    box.hidden = true;
+    return false;
+  }
+  box.replaceChildren(
+    el("b", null, "Расширение работает на старой начинке"),
+    el(
+      "p",
+      null,
+      `Страница собрана как ${BUILD}, а служебный скрипт — ${running}. ` +
+        "Пока он не перезапущен, всё показанное ниже относится к старому коду.",
+    ),
+  );
+  const btn = el("button", "go", "Перезапустить расширение");
+  btn.addEventListener("click", () => {
+    btn.disabled = true;
+    btn.textContent = "перезапускаю… нажми F5 на этой странице";
+    restart();
+  });
+  box.append(btn);
+  box.hidden = false;
+  return true;
+}
+
+void guardStale();
 void reload();
 
 // Страница обновляется сама: человек уходит смотреть видео и возвращается к

@@ -10,6 +10,7 @@ import {
 } from "./lib/detect.js";
 import * as sightings from "./lib/sightings.js";
 import * as area from "./lib/area.js";
+import { BUILD } from "./lib/build.js";
 import { toFileName, nameFromUrl, siteFolder } from "./lib/title.js";
 import * as store from "./lib/store.js";
 import * as helper from "./lib/helper.js";
@@ -339,6 +340,12 @@ async function handlePopup(msg) {
       };
     }
 
+    case "build":
+      // Отдельная лёгкая команда: по ней страницы узнают, не устарела ли
+      // начинка. Старый служебный скрипт такой команды не знает — и это тоже
+      // ответ: значит он старый.
+      return { build: BUILD };
+
     case "health":
       return helper.health();
 
@@ -354,6 +361,7 @@ async function handlePopup(msg) {
         granted = { error: String(e.message || e) };
       }
       return {
+        build: BUILD,
         // Зарегистрирован ли перехватчик прямо сейчас. Если false — виноват
         // не сайт и не разбор, а сам запуск служебного скрипта.
         webRequestApi: typeof chrome.webRequest,

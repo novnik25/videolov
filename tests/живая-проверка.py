@@ -191,6 +191,10 @@ def run(ctx, out_dir):
 
     health = popup.inner_text(".health-text").lower()
     check("окно докладывает о помощнике", "на месте" in health, health)
+    # Свежая начинка не должна показывать плашку «расширение устарело».
+    check("плашки об устаревшей начинке нет", "старой начинке" not in popup.inner_text("body"),
+          popup.inner_text("#alert") if popup.locator("#alert").count() else "")
+    check("сборка известна самопроверке", bool(sc.get("build")), sc.get("build"))
     check("находка показана в окне", popup.locator(".card").count() > 0)
     # ⚠ Заслон: пустое состояние с display:flex перебивало атрибут hidden и
     # показывалось вместе с найденным. Поймано глазами на снимке 16.09.2026.

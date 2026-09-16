@@ -1,5 +1,7 @@
 // Окно расширения: список найденного, выбор качества, ход загрузок, история.
 
+import { checkStale, restart } from "./lib/stale.js";
+
 const $ = (sel) => document.querySelector(sel);
 
 let tabId = null;
@@ -444,6 +446,31 @@ $("#clear-history").addEventListener("click", async () => {
   await refresh();
 });
 
+/**
+ * Начинка старше окна — предложить перезапуск.
+ * ⚠ В Яндекс.Браузере кнопки «Обновить» на странице расширений нет, поэтому
+ * перезапуск делается изнутри. Без этого правка кода не вступает в силу, а
+ * выглядит как «не помогло».
+ */
+async function checkStaleBuild() {
+  const { stale, running } = await checkStale();
+  if (!stale) return false;
+  const box = $("#alert");
+  box.replaceChildren(
+    el("div", null, `Расширение работает на старой начинке (${running}). Правки не действуют.`),
+  );
+  const btn = el("button", "go", "Перезапустить");
+  btn.style.marginTop = "10px";
+  btn.addEventListener("click", () => {
+    btn.disabled = true;
+    btn.textContent = "перезапускаю…";
+    restart();
+  });
+  box.append(btn);
+  box.hidden = false;
+  return true;
+}
+
 async function checkHealth() {
   const box = $("#health");
   const text = box.querySelector(".health-text");
@@ -483,5 +510,7 @@ async function checkHealth() {
   const forced = Number(new URLSearchParams(location.search).get("tab"));
   tabId = Number.isInteger(forced) && forced > 0 ? forced : (tab?.id ?? null);
   await refresh();
+  // Сначала — не устарела ли начинка: если да, остальные проверки врут.
+  if (await checkStaleBuild()) return;
   await checkHealth();
 })();
