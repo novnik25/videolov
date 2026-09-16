@@ -27,7 +27,8 @@ const NOISE_HOSTS = [
 
 /** Куски потока: одиночный сегмент, а не видео. */
 const SEGMENT = /\.(ts|m4s|aac|vtt|srt|key)(\?|$)/i;
-const SEGMENT_HINT = /(^|[/_-])(seg|segment|chunk|frag|fragment|init)[\d_-]*\.(mp4|m4a|webm)(\?|$)/i;
+const SEGMENT_HINT =
+  /(^|[/_-])(seg|segment|chunk|frag|fragment|init|fileSequence|media)[\d_-]*\.(mp4|m4a|webm)(\?|$)/i;
 
 /** Цельные файлы, которые можно скачать как есть. */
 const WHOLE_FILE = /\.(mp4|webm|mov|mkv|avi|flv|m4v|mpg|mpeg|wmv|m4a|mp3|ogg|wav)(\?|$)/i;
@@ -43,18 +44,22 @@ export function isKnownSite(pageUrl) {
 }
 
 /**
- * Что это за адрес. Возвращает null, если адрес видео не является.
- * @returns {{kind: "hls"|"dash"|"file", url: string} | null}
+ * Что это за адрес — с объяснением решения.
+ * Объяснение нужно журналу перехвата: без него «ничего не нашлось» неотличимо
+ * от «нашлось, но отброшено», а лечится это противоположными способами.
+ * @returns {{kind: "hls"|"dash"|"file", url: string} | {reason: string, segment?: boolean}}
  */
-export function classify(url, contentType = "") {
+export function classifyDetailed(url, contentType = "") {
   let host = "";
   try {
     host = new URL(url).hostname;
   } catch {
-    return null;
+    return { reason: "адрес не разобрался" };
   }
-  if (NOISE_HOSTS.some((re) => re.test(host))) return null;
-  if (SEGMENT.test(url) || SEGMENT_HINT.test(url)) return null;
+  if (NOISE_HOSTS.some((re) => re.test(host))) return { reason: "раздача кусков площадки" };
+  if (SEGMENT.test(url) || SEGMENT_HINT.test(url)) {
+    return { reason: "кусок потока", segment: true };
+  }
 
   if (HLS.test(url) || /mpegurl/i.test(contentType)) return { kind: "hls", url };
   if (DASH.test(url) || /dash\+xml/i.test(contentType)) return { kind: "dash", url };
@@ -63,7 +68,36 @@ export function classify(url, contentType = "") {
   if (/^video\//i.test(contentType) || /^audio\//i.test(contentType)) {
     return { kind: "file", url };
   }
-  return null;
+  return { reason: contentType ? `не видео (${contentType.slice(0, 40)})` : "не видео" };
+}
+
+/**
+ * Что это за адрес. Возвращает null, если адрес видео не является.
+ * @returns {{kind: "hls"|"dash"|"file", url: string} | null}
+ */
+export function classify(url, contentType = "") {
+  const out = classifyDetailed(url, contentType);
+  return out.kind ? out : null;
+}
+
+/**
+ * Лежит ли адрес ВНУТРИ папки другого — то есть является ли он его частью.
+ * Мастер-плейлист живёт в `/курс/урок2/master.m3u8`, а его качества — в
+ * `/курс/урок2/720/index.m3u8`. Без этой проверки одно видео даёт семь строк:
+ * мастер, каждое качество и файлы инициализации по отдельности. Замерено на
+ * живом плеере 16.09.2026.
+ */
+export function isInsideOf(childUrl, parentUrl) {
+  try {
+    const child = new URL(childUrl);
+    const parent = new URL(parentUrl);
+    if (child.origin !== parent.origin) return false;
+    const dir = parent.pathname.slice(0, parent.pathname.lastIndexOf("/") + 1);
+    if (!dir || dir === "/") return false;
+    return child.pathname.startsWith(dir) && child.pathname !== parent.pathname;
+  } catch {
+    return false;
+  }
 }
 
 /**

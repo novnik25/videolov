@@ -638,3 +638,16 @@ button.ghost[aria-expanded="true"] .chev {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Объяснение под пустым состоянием: почему именно пусто. */
+.empty-hint {
+  margin: 0;
+  padding: var(--s3);
+  border-radius: var(--radius-sm);
+  background: rgba(210, 153, 34, 0.1);
+  border: 1px solid rgba(210, 153, 34, 0.3);
+  color: #f0cc7a;
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: left;
+}

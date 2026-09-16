@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="options.css" />
+    <title>Видеолов — что вижу</title>
+  </head>
+  <body class="page">
+    <div class="ambient" aria-hidden="true">
+      <i class="blob blob-1"></i>
+      <i class="blob blob-2"></i>
+    </div>
+
+    <div class="wrap wide">
+      <header class="head">
+        <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="11" fill="url(#g)" />
+          <path d="M10 8.5l6 3.5-6 3.5z" fill="#fff" />
+          <defs>
+            <linearGradient id="g" x1="0" y1="0" x2="0" y2="24">
+              <stop offset="0" stop-color="#7C86E8" />
+              <stop offset="1" stop-color="#4C57BE" />
+            </linearGradient>
+          </defs>
+        </svg>
+        <div>
+          <h1>Что вижу</h1>
+          <p class="lead">Страница для разбора: почему видео не нашлось</p>
+        </div>
+      </header>
+
+      <section class="card">
+        <h3>Порядок действий</h3>
+        <ol class="steps">
+          <li>Нажми <b>«Начать заново»</b> — журнал очистится.</li>
+          <li>Перейди на вкладку с уроком и <b>запусти видео</b>, дай ему поиграть секунд десять.</li>
+          <li>Вернись сюда и нажми <b>«Обновить»</b>.</li>
+          <li>Нажми <b>«Скопировать для разбора»</b> и пришли мне текст.</li>
+        </ol>
+        <div class="row">
+          <button id="reset" class="ghost">Начать заново</button>
+          <button id="reload" class="go">Обновить</button>
+          <button id="copy" class="ghost">Скопировать для разбора</button>
+          <span id="copied" class="copied" hidden>скопировано</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Приговор</h3>
+        <div id="verdict" class="verdict">…</div>
+      </section>
+
+      <section class="card">
+        <h3>Счётчики перехвата</h3>
+        <div id="counters" class="counters"></div>
+        <div id="samples" class="hint mono"></div>
+      </section>
+
+      <section class="card">
+        <h3>Вкладки</h3>
+        <div id="tabs" class="hint mono"></div>
+      </section>
+
+      <section class="card">
+        <h3>Что видел перехватчик</h3>
+        <p class="hint">
+          Куски потока сюда не пишутся — их тысячи, они вытеснили бы всё
+          остальное; для них есть счётчик выше.
+        </p>
+        <div id="log" class="log"></div>
+      </section>
+    </div>
+
+    <script type="module" src="diag.js"></script>
+  </body>
+</html>

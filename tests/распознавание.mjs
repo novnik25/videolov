@@ -1,6 +1,6 @@
 // Проверка распознавания: что считаем видео, что — мусором.
 const BASE = "file:///C:/Users/novos/OneDrive/Документы/Claude/Projects/Видеолов/extension/lib/";
-const { classify, dedupKey, isKnownSite } = await import(BASE + "detect.js");
+const { classify, classifyDetailed, dedupKey, isInsideOf, isKnownSite } = await import(BASE + "detect.js");
 const { parseMaster, isMaster, bestPerHeight } = await import(BASE + "hls.js");
 
 let bad = 0;
@@ -77,6 +77,20 @@ check("из повторов остался самый жирный", uniq[0].ba
 
 const media = "#EXTM3U\n#EXTINF:6.0,\nseg1.ts\n#EXTINF:6.0,\nseg2.ts";
 check("поток сегментов — не мастер", isMaster(media), false);
+
+
+// --- части одного видео ---
+const parentUrl = "https://cdn.ru/media/lesson2/master.m3u8";
+check("качество лежит внутри мастера", isInsideOf("https://cdn.ru/media/lesson2/720/index.m3u8", parentUrl), true);
+check("файл инициализации внутри мастера", isInsideOf("https://cdn.ru/media/lesson2/v5/init.mp4", parentUrl), true);
+check("другой урок — не часть", isInsideOf("https://cdn.ru/media/lesson3/master.m3u8", parentUrl), false);
+check("чужой домен — не часть", isInsideOf("https://other.ru/media/lesson2/720/i.m3u8", parentUrl), false);
+check("сам себе не часть", isInsideOf(parentUrl, parentUrl), false);
+check("корень чужой папкой не считается", isInsideOf("https://cdn.ru/a.m3u8", "https://cdn.ru/b.m3u8"), false);
+
+// --- объяснение отказа ---
+check("отказ объяснён словами", typeof classifyDetailed("https://cdn.ru/app.js").reason, "string");
+check("кусок помечен как кусок", classifyDetailed("https://cdn.ru/s/seg-1.ts").segment, true);
 
 console.log(bad ? `\nПРОВАЛОВ: ${bad}` : "\nвсё сошлось");
 process.exit(bad ? 1 : 0);

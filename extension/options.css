@@ -217,3 +217,123 @@ input[type="range"]:focus-visible::-webkit-slider-thumb {
   box-shadow: var(--shadow-pop);
   animation: rise var(--slow) var(--ease);
 }
+
+/* ------------------------------------------------------- страница разбора */
+
+.wrap.wide {
+  max-width: 900px;
+}
+
+.steps {
+  margin: 0 0 var(--s4);
+  padding-left: 20px;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+.steps b {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.verdict {
+  padding: var(--s4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+}
+.verdict b {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 15px;
+}
+.verdict p {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.verdict.ok {
+  border-color: rgba(63, 185, 80, 0.35);
+}
+.verdict.ok b {
+  color: var(--ok);
+}
+.verdict.bad {
+  border-color: rgba(242, 85, 90, 0.35);
+}
+.verdict.bad b {
+  color: #ff9a9d;
+}
+
+.counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-bottom: var(--s3);
+}
+.stat {
+  flex: 1 1 110px;
+  padding: var(--s3);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+}
+.stat b {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+}
+.stat span {
+  color: var(--fg-faint);
+  font-size: 11px;
+}
+
+.log {
+  max-height: 420px;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.3);
+}
+.entry {
+  display: grid;
+  grid-template-columns: 70px 180px 104px 1fr;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: 5px var(--s3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+.entry:last-child {
+  border-bottom: none;
+}
+.entry.taken {
+  background: rgba(94, 106, 210, 0.12);
+  color: var(--fg);
+}
+.entry .kind,
+.entry .type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.entry .kind {
+  color: var(--fg-faint);
+}
+.entry.taken .kind {
+  color: var(--accent-hi);
+  font-weight: 700;
+}
+.entry .url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copied {
+  color: var(--ok);
+  font-size: 12px;
+}

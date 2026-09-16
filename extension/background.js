@@ -1,6 +1,14 @@
 // Видеолов — фоновый скрипт. Находит видео, отдаёт задания помощнику, ведёт учёт.
 
-import { classify, dedupKey, isKnownSite, sourceLabel } from "./lib/detect.js";
+import {
+  classify,
+  classifyDetailed,
+  dedupKey,
+  isInsideOf,
+  isKnownSite,
+  sourceLabel,
+} from "./lib/detect.js";
+import * as sightings from "./lib/sightings.js";
 import { toFileName, nameFromUrl, siteFolder } from "./lib/title.js";
 import * as store from "./lib/store.js";
 import * as helper from "./lib/helper.js";
@@ -28,8 +36,19 @@ async function tabTitle(tabId) {
 }
 
 async function addFound(tabId, item) {
-  const list = await store.getFound(tabId);
+  let list = await store.getFound(tabId);
   if (list.some((x) => x.id === item.id)) return false;
+
+  // Одно видео — одна строка. Плеер тянет мастер-плейлист, за ним плейлисты
+  // каждого качества и файлы инициализации; все они лежат ВНУТРИ папки мастера.
+  // Ребёнок при живом родителе не показывается, а пришедший родитель забирает
+  // место у уже показанных детей.
+  if (item.kind !== "page") {
+    const media = (x) => x.kind !== "page";
+    if (list.some((x) => media(x) && isInsideOf(item.url, x.url))) return false;
+    list = list.filter((x) => !(media(x) && isInsideOf(x.url, item.url)));
+  }
+
   list.unshift(item);
   await store.setFound(tabId, list.slice(0, MAX_PER_TAB));
   await paintBadge(tabId);
@@ -54,9 +73,28 @@ async function paintBadge(tabId) {
 /** Перехват сети: основной способ увидеть поток. */
 chrome.webRequest.onBeforeRequest.addListener(
   (d) => {
-    if (d.tabId < 0) return;
-    const hit = classify(d.url);
-    if (hit) void record(d.tabId, hit, d.initiator || "");
+    const out = classifyDetailed(d.url);
+    // ⚠ tabId −1 — это запрос служебного работника сайта, не вкладки. Показать
+    // его негде, но в журнале он виден: иначе «перехват молчит» неотличимо от
+    // «перехват работает, а привязать не к чему».
+    if (!out.kind || d.tabId < 0) {
+      const why = out.kind ? "вне вкладки" : out.reason;
+      void sightings.note(d.url, d.type, d.tabId, why, false, out.segment);
+      return;
+    }
+    // Приговор пишем ПОСЛЕ попытки добавить: «узнали формат» и «показали
+    // человеку» — разные вещи, и счётчик обязан считать вторую. Иначе куски
+    // одного ролика раздувают число находок в десятки раз.
+    void (async () => {
+      const added = await record(d.tabId, out, d.initiator || "");
+      await sightings.note(
+        d.url,
+        d.type,
+        d.tabId,
+        added ? out.kind : "часть уже найденного видео",
+        added,
+      );
+    })();
   },
   { urls: ["<all_urls>"], types: ["media", "xmlhttprequest", "object", "other"] },
 );
@@ -73,6 +111,7 @@ chrome.webRequest.onHeadersReceived.addListener(
   ["responseHeaders"],
 );
 
+/** @returns {Promise<boolean>} попала ли находка в список вкладки */
 async function record(tabId, hit, initiator) {
   let pageUrl = initiator;
   try {
@@ -82,7 +121,7 @@ async function record(tabId, hit, initiator) {
     /* вкладка закрылась */
   }
   // На известной площадке сырой поток не нужен: качаем страницу целиком.
-  if (isKnownSite(pageUrl)) return;
+  if (isKnownSite(pageUrl)) return false;
 
   const title = await tabTitle(tabId);
   const item = {
@@ -95,7 +134,7 @@ async function record(tabId, hit, initiator) {
     label: sourceLabel(hit),
     at: Date.now(),
   };
-  await addFound(tabId, item);
+  return addFound(tabId, item);
 }
 
 /** Осмотр страницы: заголовок и видео прямо в вёрстке. */
@@ -224,8 +263,12 @@ async function handlePopup(msg) {
   switch (msg?.cmd) {
     case "state": {
       const tabId = msg.tabId;
+      const found = typeof tabId === "number" ? await store.getFound(tabId) : [];
       return {
-        found: typeof tabId === "number" ? await store.getFound(tabId) : [],
+        found,
+        // Пустому списку нужна причина: «тут нет видео» и «видео есть, но его
+        // плейлист прошёл мимо» — разные беды с разным лечением.
+        hint: found.length || typeof tabId !== "number" ? "" : await sightings.hintForTab(tabId),
         jobs: await store.getJobs(),
         history: await store.getHistory(),
         settings: await store.getSettings(),
@@ -234,6 +277,25 @@ async function handlePopup(msg) {
 
     case "health":
       return helper.health();
+
+    case "sightings":
+      return sightings.readLog();
+
+    case "clear-sightings":
+      await sightings.clearLog();
+      return { ok: true };
+
+    case "tabs-overview": {
+      // Для страницы диагностики: что расширение видит по КАЖДОЙ вкладке.
+      const tabs = await chrome.tabs.query({});
+      const out = [];
+      for (const t of tabs) {
+        if (t.id == null) continue;
+        const found = await store.getFound(t.id);
+        out.push({ id: t.id, title: t.title || "", url: t.url || "", found: found.length });
+      }
+      return { tabs: out };
+    }
 
     case "probe": {
       const item = await findItem(msg.tabId, msg.itemId);

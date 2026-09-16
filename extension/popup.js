@@ -147,6 +147,11 @@ function renderFound() {
   count.hidden = state.found.length === 0;
   $("#empty").hidden = state.found.length > 0;
 
+  // Пустому окну — объяснение, а не молчание.
+  const hintBox = $("#empty-hint");
+  hintBox.textContent = state.hint || "";
+  hintBox.hidden = !state.hint;
+
   state.found.forEach((item, i) => box.append(foundCard(item, i)));
 }
 
@@ -430,6 +435,10 @@ function showAlert(msgOrErr) {
 /* ----------------------------------------------------------- запуск */
 
 $("#settings").addEventListener("click", () => chrome.runtime.openOptionsPage());
+$("#why").addEventListener("click", () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL("diag.html") });
+  window.close();
+});
 $("#clear-history").addEventListener("click", async () => {
   await send("clear-history");
   await refresh();
