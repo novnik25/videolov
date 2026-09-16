@@ -26,6 +26,8 @@ PORT = 8903
 
 H1 = "0b95479e669505fb09075d70da9ec3a0"
 H2 = "eaa19b6afc39a28d9d35814a4f19631b"
+B1 = "1c84e2ff77a616ac1a186e81eb0fd4b1"
+B2 = "fb5b28a7cd4ab39ea46925b5c8742a2c"
 MASTER = f"/api/playlist/master/{H1}/{H2}?user-cdn=cdnvideo&jwt=eyJ0eXAiOiJKV1Qi"
 MEDIA = f"/api/playlist/media/{H1}/{H2}/480?consumer=vod&sid="
 
@@ -55,8 +57,16 @@ PAGE = f"""<!doctype html>
 <script>
 (async () => {{
   const say = (t) => document.getElementById("s").textContent = t;
-  await fetch("{MASTER}");
-  await fetch("{MEDIA}");
+  // ⚠ ОДНОВРЕМЕННО, а не по очереди: на живой странице два плеера стартуют
+  // разом, и записи о находках наступают друг другу на пятки.
+  await Promise.all([
+    fetch("{MASTER}"),
+    fetch("/api/playlist/master/{B1}/{B2}?user-cdn=cdnvideo&jwt=eyJ0eXAiOiJKV1Qi"),
+  ]);
+  await Promise.all([
+    fetch("{MEDIA}"),
+    fetch("/api/playlist/media/{B1}/{B2}/480?consumer=vod&sid="),
+  ]);
   for (const n of [0, 1]) await fetch(`/api/storage/chunk/{H1}/{H2}/480/${{n}}.bin?host=vh-125`);
   await fetch("/pl/api/teach/lesson/comments");
   await fetch("/api/save-last-seen-time/set?current-time=99");
@@ -73,7 +83,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(PAGE, "text/html; charset=utf-8")
         if path.startswith("/api/playlist/master/"):
             # ⚠ Тип НАРОЧНО неправильный: сайт отдаёт плейлист как json.
-            return self.send(MASTER_BODY, "application/json")
+            body = MASTER_BODY if H1 in path else MASTER_BODY.replace(H1, B1).replace(H2, B2)
+            return self.send(body, "application/json")
         if path.startswith("/api/playlist/media/"):
             return self.send(MEDIA_BODY, "application/json")
         if path.startswith("/api/storage/chunk/"):
@@ -159,8 +170,13 @@ def run(ctx):
             print(f"      журнал: {e['verdict']} | {e['url'][:90]}")
         return
 
-    check("ровно одна строка на урок", len(found) == 1, f"строк: {len(found)}")
-    item = found[0]
+    check("два разных ролика — две строки", len(found) == 2, f"строк: {len(found)}")
+
+    # ⚠ Значок на иконке: с одним видео он показывался, с несколькими — нет.
+    badge = sw.evaluate("async (id) => chrome.action.getBadgeText({tabId: id})", tab_id)
+    check("на значке видно число находок", badge == str(len(found)), f"на значке «{badge}»")
+
+    item = [f for f in found if H1 in f["url"]][0]
     check("это HLS", item["kind"] == "hls", item["kind"])
     check("выбран МАСТЕР, а не качество", "/master/" in item["url"], item["url"])
     check(

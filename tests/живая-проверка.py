@@ -297,39 +297,52 @@ def run(ctx, out_dir):
 
     # Снимок на ходу: полоса, скорость, остаток.
     popup.wait_for_timeout(4000)
-    check("раздел «Качается» появился", popup.locator("#jobs-section").is_visible())
-    check("полоса прогресса рисуется", popup.locator("#jobs .progress i").count() == 1)
+    check("раздел загрузок появился", popup.locator("#downloads-section").is_visible())
+    check("полоса прогресса рисуется", popup.locator("#downloads .progress i").count() == 1)
     popup.screenshot(path=str(ROOT / "docs" / "окно-загрузка.png"))
 
+    # ⚠ Удачная загрузка НЕ остаётся карточкой: она уходит в историю сама.
+    # Поэтому ждём не статус «готово», а исчезновение задания из работы.
     deadline = time.time() + 180
     job = {}
+    done = None
     while time.time() < deadline:
         jobs = popup.evaluate(
             "async () => (await chrome.storage.session.get('jobs')).jobs || {}"
         )
-        job = jobs.get(job_id, {})
-        if job.get("status") in ("done", "error", "cancelled"):
+        job = jobs.get(job_id)
+        if job is None:
+            hist = popup.evaluate(
+                "async () => (await chrome.storage.local.get('history')).history || []"
+            )
+            done = next((h for h in hist if h["id"] == job_id), None)
+            if done:
+                break
+        elif job.get("status") in ("error", "cancelled"):
             break
         popup.wait_for_timeout(1000)
 
-    check("загрузка завершилась удачно", job.get("status") == "done", job)
-    if job.get("status") != "done":
+    check("загрузка завершилась удачно", done is not None, job or "в истории записи нет")
+    if not done:
         return
 
-    file = Path(job["file"])
+    file = Path(done["file"])
     check("файл на диске", file.exists(), file)
     if file.exists():
         check("файл не пустой", file.stat().st_size > 100_000, file.stat().st_size)
         check("имя файла целое", file.name == "Урок 2 проверка.m4a", file.name)
         check("разложено по папке сайта", file.parent.name == "127.0.0.1", file.parent.name)
 
-    history = popup.evaluate("async () => (await chrome.storage.local.get('history')).history || []")
-    check("запись попала в историю", len(history) > 0 and history[0]["file"] == str(file), history[:1])
+    check("запись в истории первая", done["file"] == str(file), done.get("file"))
 
     popup.wait_for_timeout(1200)
-    check("история показана в окне", popup.locator("#history .card").count() > 0)
+    check("готовая загрузка показана одной строкой", popup.locator("#downloads .card").count() == 1,
+          popup.locator("#downloads .card").count())
+    check("карточки «готово» с крестиком больше нет", "готово" not in popup.inner_text("#downloads"),
+          popup.inner_text("#downloads")[:120])
     check_cancel(popup, tab_id, item)
-    check("кнопки истории со значками", popup.locator("#history .card button svg").count() >= 3)
+    check("кнопки истории со значками", popup.locator("#downloads .card button svg").count() >= 3)
+    check("обложка или метка на месте", popup.locator("#downloads .card .thumb").count() >= 1)
     popup.screenshot(path=str(ROOT / "docs" / "окно-история.png"))
 
 

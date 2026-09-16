@@ -84,7 +84,30 @@ async function tabTitle(tabId) {
   }
 }
 
-async function addFound(tabId, item) {
+/**
+ * Очередь записи по вкладкам.
+ * ⚠ Находка добавляется «прочитал список — изменил — записал». Два плеера на
+ * странице стартуют одновременно, оба читают ПУСТОЙ список и оба пишут свой
+ * единственный элемент — второй затирает первого, и одно из видео пропадает.
+ * Записи по одной вкладке выстраиваются в цепочку.
+ */
+const queues = new Map();
+
+function inQueue(tabId, work) {
+  const prev = queues.get(tabId) || Promise.resolve();
+  const next = prev.then(work, work);
+  queues.set(
+    tabId,
+    next.catch(() => {}),
+  );
+  return next;
+}
+
+function addFound(tabId, item) {
+  return inQueue(tabId, () => addFoundNow(tabId, item));
+}
+
+async function addFoundNow(tabId, item) {
   let list = await store.getFound(tabId);
   if (list.some((x) => x.id === item.id)) return false;
 
@@ -283,6 +306,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (typeof tabId !== "number") return;
     void (async () => {
       if (msg.top && msg.title) await rememberTitle(tabId, msg.title);
+      if (msg.poster) await area.set({ [`poster:${tabId}`]: msg.poster });
       if (isKnownSite(msg.pageUrl)) {
         const title = msg.title || (await tabTitle(tabId));
         await addFound(tabId, {
@@ -403,6 +427,13 @@ async function handlePopup(msg) {
     case "state": {
       const tabId = msg.tabId;
       const found = typeof tabId === "number" ? await store.getFound(tabId) : [];
+      // Обложка приезжает осмотром страницы — часто ПОЗЖЕ самой находки,
+      // поэтому подставляется здесь, а не вшивается в неё навсегда.
+      if (found.length && typeof tabId === "number") {
+        const got = await area.get(`poster:${tabId}`);
+        const poster = got[`poster:${tabId}`];
+        if (poster) for (const f of found) if (!f.poster) f.poster = poster;
+      }
       return {
         found,
         // Пустому списку нужна причина: «тут нет видео» и «видео есть, но его
@@ -506,6 +537,7 @@ async function handlePopup(msg) {
       await store.putJob({
         id: jobId,
         name: toFileName(msg.name || item.name),
+        poster: msg.poster || item.poster || "",
         mode: msg.mode || "av",
         status: "running",
         percent: 0,
@@ -595,15 +627,20 @@ helper.onEvent(async (ev) => {
   if (ev.kind === "done") {
     const jobs = await store.getJobs();
     const job = jobs[ev.jobId] || {};
-    await store.putJob({ id: ev.jobId, status: "done", percent: 100, file: ev.file });
     await store.pushHistory({
       id: ev.jobId,
       name: job.name || ev.file,
       file: ev.file,
       site: ev.site || "",
       size: ev.size || 0,
+      poster: job.poster || "",
+      mode: job.mode || "av",
       at: Date.now(),
     });
+    // ⚠ Карточку убираем сами. Раньше готовая загрузка висела с галочкой
+    // «готово», пока человек не нажмёт крестик, — и та же самая запись
+    // одновременно стояла в истории. Два места про одно событие.
+    await store.dropJob(ev.jobId);
     notifyPopup();
     void refreshBadge();
     return;

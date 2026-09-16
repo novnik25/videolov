@@ -74,6 +74,29 @@ const fmtEta = (s) => {
   return m ? `${m} мин ${sec} с` : `${sec} с`;
 };
 
+/**
+ * Обложка урока. Если её нет — рисуем заглушку того же размера: без неё
+ * карточки прыгают по ширине, а список выглядит рваным.
+ */
+function thumb(src, label) {
+  const box = el("div", "thumb");
+  if (src) {
+    const img = el("img");
+    img.src = src;
+    img.alt = "";
+    img.loading = "lazy";
+    // Битая ссылка на превью не должна оставлять дыру.
+    img.addEventListener("error", () => {
+      img.remove();
+      box.append(el("span", "thumb-tag", label));
+    });
+    box.append(img);
+  } else {
+    box.append(el("span", "thumb-tag", label));
+  }
+  return box;
+}
+
 function el(tag, cls, text) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -117,8 +140,7 @@ function render() {
   const caret = key ? [active.selectionStart, active.selectionEnd] : null;
 
   renderFound();
-  renderJobs();
-  renderHistory();
+  renderDownloads();
 
   if (!key) return;
   const next = document.querySelector(`input[data-name-for="${CSS.escape(key)}"]`);
@@ -162,7 +184,7 @@ function foundCard(item, index) {
   stagger(card, `f:${item.id}`, index);
 
   const head = el("div", "card-head");
-  head.append(el("span", "tag", item.label));
+  head.append(thumb(item.poster, item.label));
   const titleBox = el("div", "title");
   titleBox.append(el("div", null, item.name || item.title || "без названия"));
   titleBox.append(el("div", "sub", shortUrl(item.url)));
@@ -266,6 +288,7 @@ function foundCard(item, index) {
       await send("download", {
         itemId: item.id,
         name: nameInput.value.trim() || item.name,
+        poster: item.poster || "",
         mode: modes.get(item.id) || "av",
         formatId: pick.id || "",
         height: pick.height || 0,
@@ -304,65 +327,98 @@ async function loadFormats(item) {
   if (opened.has(item.id)) render();
 }
 
-function renderJobs() {
+/**
+ * Загрузки одной лентой: сверху идущие, ниже завершённые.
+ * ⚠ Раньше это были два раздела, и готовая загрузка висела с галочкой
+ * «готово», пока её не уберут крестиком, — при том что та же запись уже
+ * стояла в «Завершено». Одно событие в двух местах человек читает как ошибку.
+ */
+function renderDownloads() {
   const jobs = Object.values(state.jobs).sort((a, b) => b.startedAt - a.startedAt);
-  $("#jobs-section").hidden = jobs.length === 0;
-  const box = $("#jobs");
+  const history = state.history || [];
+  $("#downloads-section").hidden = jobs.length === 0 && history.length === 0;
+  $("#clear-history").hidden = history.length === 0;
+
+  const box = $("#downloads");
   box.replaceChildren();
+  jobs.forEach((job, i) => box.append(jobCard(job, i)));
+  history.slice(0, 15).forEach((h, i) => box.append(historyCard(h, jobs.length + i)));
+}
 
-  jobs.forEach((job, i) => {
-    const card = el("div", "card");
-    stagger(card, `j:${job.id}`, i);
+function jobCard(job, index) {
+  const card = el("div", "card");
+  stagger(card, `j:${job.id}`, index);
 
-    const head = el("div", "card-head");
-    head.append(el("span", "tag", modeTag(job.mode)));
-    const t = el("div", "title");
-    t.append(el("div", null, job.name));
-    if (job.stage) t.append(el("div", "sub", job.stage));
-    head.append(t);
-    card.append(head);
+  const head = el("div", "card-head");
+  head.append(thumb(job.poster, modeTag(job.mode)));
+  const t = el("div", "title");
+  t.append(el("div", null, job.name));
+  if (job.stage) t.append(el("div", "sub", job.stage));
+  head.append(t);
+  card.append(head);
 
-    if (job.status === "running") {
-      const bar = el("div", "progress");
-      const fill = el("i");
-      fill.style.width = `${Math.min(100, job.percent || 0)}%`;
-      bar.append(fill);
-      card.append(bar);
+  if (job.status === "running") {
+    const bar = el("div", "progress");
+    const fill = el("i");
+    fill.style.width = `${Math.min(100, job.percent || 0)}%`;
+    bar.append(fill);
+    card.append(bar);
 
-      const stats = el("div", "stats");
-      stats.append(el("span", "pct", `${(job.percent || 0).toFixed(0)} %`));
-      if (job.speed) stats.append(el("span", null, fmtSpeed(job.speed)));
-      if (job.total) stats.append(el("span", null, fmtSize(job.total)));
-      const right = el("span", "spacer", job.eta ? `осталось ${fmtEta(job.eta)}` : "");
-      stats.append(right);
-      card.append(stats);
+    const stats = el("div", "stats");
+    stats.append(el("span", "pct", `${(job.percent || 0).toFixed(0)} %`));
+    if (job.speed) stats.append(el("span", null, fmtSpeed(job.speed)));
+    if (job.total) stats.append(el("span", null, fmtSize(job.total)));
+    stats.append(el("span", "spacer", job.eta ? `осталось ${fmtEta(job.eta)}` : ""));
+    card.append(stats);
 
-      const row = el("div", "row");
-      const cancel = el("button", "ghost danger");
-      cancel.append(icon("x"), el("span", null, "Отменить"));
-      cancel.addEventListener("click", () => send("cancel", { jobId: job.id }).catch(showAlert));
-      row.append(cancel);
-      card.append(row);
-    } else if (job.status === "error") {
-      const s = el("div", "state");
-      s.append(icon("alert"), el("span", null, "не получилось"));
-      card.append(s);
-      card.append(el("div", "err", job.error || ""));
-      card.append(hideRow(job.id));
-    } else if (job.status === "cancelled") {
-      const s = el("div", "state");
-      s.append(icon("pause"), el("span", null, "отменено"));
-      card.append(s);
-      card.append(hideRow(job.id));
-    } else {
-      const s = el("div", "state done");
-      s.append(icon("check"), el("span", null, "готово"));
-      card.append(s);
-      card.append(hideRow(job.id));
-    }
+    const row = el("div", "row");
+    const cancel = el("button", "ghost danger");
+    cancel.append(icon("x"), el("span", null, "Отменить"));
+    cancel.addEventListener("click", () => send("cancel", { jobId: job.id }).catch(showAlert));
+    row.append(cancel);
+    card.append(row);
+    return card;
+  }
 
-    box.append(card);
+  // Осталось только неудачное и отменённое: удачное уходит в историю само.
+  const s = el("div", "state");
+  s.append(
+    icon(job.status === "error" ? "alert" : "pause"),
+    el("span", null, job.status === "error" ? "не получилось" : "отменено"),
+  );
+  card.append(s);
+  if (job.error) card.append(el("div", "err", job.error));
+  card.append(hideRow(job.id));
+  return card;
+}
+
+function historyCard(h, index) {
+  const card = el("div", "card");
+  stagger(card, `h:${h.id}`, index);
+
+  const head = el("div", "card-head");
+  head.append(thumb(h.poster, modeTag(h.mode)));
+  const t = el("div", "title");
+  t.append(el("div", null, h.name));
+  const facts = [h.site, h.size ? fmtSize(h.size) : ""].filter(Boolean).join(" · ");
+  t.append(el("div", "sub", facts));
+  head.append(t);
+  card.append(head);
+
+  const row = el("div", "row");
+  row.append(
+    historyButton("play", "Играть", () => send("play", { path: h.file })),
+    historyButton("folder", "Папка", () => send("open-folder", { path: h.file })),
+  );
+  const del = historyButton("trash", "Удалить", async () => {
+    if (!confirm(`Удалить файл «${h.name}» с диска?`)) return;
+    await send("delete-file", { path: h.file });
+    await refresh();
   });
+  del.classList.add("danger");
+  row.append(del);
+  card.append(row);
+  return card;
 }
 
 function hideRow(jobId) {
@@ -376,40 +432,6 @@ function hideRow(jobId) {
 
 function modeTag(mode) {
   return mode === "a" ? "ЗВУК" : mode === "v" ? "БЕЗ ЗВУКА" : "ВИДЕО";
-}
-
-function renderHistory() {
-  const list = state.history || [];
-  $("#history-section").hidden = list.length === 0;
-  const box = $("#history");
-  box.replaceChildren();
-
-  list.slice(0, 15).forEach((h, i) => {
-    const card = el("div", "card");
-    stagger(card, `h:${h.id}`, i);
-
-    const head = el("div", "card-head");
-    const t = el("div", "title");
-    t.append(el("div", null, h.name));
-    t.append(el("div", "sub", [h.site, h.size ? fmtSize(h.size) : ""].filter(Boolean).join(" · ")));
-    head.append(t);
-    card.append(head);
-
-    const row = el("div", "row");
-    row.append(
-      historyButton("play", "Играть", () => send("play", { path: h.file })),
-      historyButton("folder", "Папка", () => send("open-folder", { path: h.file })),
-    );
-    const del = historyButton("trash", "Удалить", async () => {
-      if (!confirm(`Удалить файл «${h.name}» с диска?`)) return;
-      await send("delete-file", { path: h.file });
-      await refresh();
-    });
-    del.classList.add("danger");
-    row.append(del);
-    card.append(row);
-    box.append(card);
-  });
 }
 
 function historyButton(name, label, action) {

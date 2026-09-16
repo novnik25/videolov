@@ -6,12 +6,25 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
+/**
+ * Строка аргументов для проводника.
+ * ⚠ Node сам заключает аргумент в кавычки, когда в нём есть пробел, и получается
+ * `"/select,C:\путь\Урок 6.mp4"` — кавычки охватывают И ключ. Проводник такую
+ * строку не понимает: молча открывает «Документы» или не делает ничего. Ему
+ * нужны кавычки ВНУТРИ: `/select,"C:\путь\Урок 6.mp4"`. Поэтому аргументы
+ * собираются вручную и передаются дословно (windowsVerbatimArguments).
+ * Поймано по жалобе: кнопка «Папка» не открывала папку. 16.09.2026.
+ */
+function explorerArgs(file) {
+  return fs.existsSync(file) ? `/select,"${file}"` : `"${path.dirname(file)}"`;
+}
+
 /** Показать файл в проводнике (выделенным). */
 function openFolder(file) {
   if (!file) throw new Error("не знаю, какой файл показывать");
-  const target = fs.existsSync(file) ? file : path.dirname(file);
   // ⚠ explorer.exe возвращает код 1 даже при успехе — ошибку по коду не судим.
-  spawn("explorer.exe", [fs.existsSync(file) ? `/select,${target}` : target], {
+  spawn("explorer.exe", [explorerArgs(file)], {
+    windowsVerbatimArguments: true,
     windowsHide: true,
     detached: true,
     stdio: "ignore",
@@ -22,7 +35,11 @@ function openFolder(file) {
 /** Открыть файл тем, чем система открывает такие файлы. */
 function play(file) {
   if (!file || !fs.existsSync(file)) throw new Error("файла больше нет на диске");
-  spawn("cmd", ["/c", "start", "", file], {
+  // ⚠ Та же ловушка, что и у проводника: start требует своих кавычек, причём
+  // первый парный аргумент он считает ЗАГОЛОВКОМ окна — отсюда пустые "" перед
+  // путём. Без дословной передачи путь с пробелами разваливается.
+  spawn("cmd", [`/c start "" "${file}"`], {
+    windowsVerbatimArguments: true,
     windowsHide: true,
     detached: true,
     stdio: "ignore",
@@ -80,4 +97,4 @@ function pickFolder(done) {
   );
 }
 
-module.exports = { openFolder, play, deleteFile, pickFolder };
+module.exports = { openFolder, play, deleteFile, pickFolder, explorerArgs };

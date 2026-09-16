@@ -15,6 +15,33 @@ function pageTitle() {
   return h1 || "";
 }
 
+/**
+ * Обложка урока: по ней в списке видно, ЧТО именно скачиваешь.
+ * Берём в порядке надёжности: постер плеера, og:image, ссылка на превью.
+ */
+function pagePoster() {
+  const video = document.querySelector("video[poster]");
+  if (video?.poster) return absolute(video.poster);
+  const meta = document.querySelector(
+    'meta[property="og:image"], meta[name="og:image"], meta[property="twitter:image"]',
+  );
+  const content = meta?.getAttribute("content")?.trim();
+  if (content) return absolute(content);
+  const link = document.querySelector('link[rel="image_src"]')?.getAttribute("href");
+  return link ? absolute(link) : "";
+}
+
+function absolute(src) {
+  try {
+    const u = new URL(src, location.href);
+    // data: и blob: показывать можно, но в список они не годятся: первые
+    // раздувают хранилище, вторые мертвы вне своей страницы.
+    return u.protocol === "http:" || u.protocol === "https:" ? u.href : "";
+  } catch {
+    return "";
+  }
+}
+
 function videoTitle(el) {
   // Подпись рядом с плеером бывает точнее заголовка вкладки.
   const labelled = el.getAttribute("title") || el.getAttribute("aria-label");
@@ -47,6 +74,7 @@ function report() {
     chrome.runtime.sendMessage({
       cmd: "scan",
       title: pageTitle(),
+      poster: pagePoster(),
       pageUrl: location.href,
       top: window.top === window,
       videos: collect(),
