@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+    <link rel="stylesheet" href="options.css" />
+    <title>Видеолов — настройки</title>
+  </head>
+  <body class="page">
+    <h1>Видеолов</h1>
+
+    <div class="card">
+      <h3>Куда сохранять</h3>
+      <p class="hint">
+        Если не выбрать ничего — файлы лягут в <b>Загрузки\Видеолов</b>.
+      </p>
+      <div class="row">
+        <input id="folder" type="text" placeholder="Загрузки\Видеолов" readonly />
+        <button id="pick" class="ghost">Выбрать…</button>
+        <button id="reset-folder" class="ghost">Сбросить</button>
+      </div>
+      <label class="check">
+        <input id="perSite" type="checkbox" />
+        <span>Раскладывать по папкам сайта <i>(…\Видеолов\curs.kudryavtsevtony.ru\Урок 2.mp4)</i></span>
+      </label>
+    </div>
+
+    <div class="card">
+      <h3>Скорость</h3>
+      <p class="hint">
+        Сколько кусков потока тянуть одновременно. Это и есть главный разгон:
+        один поток — как у обычных качалок, шестнадцать — во весь канал.
+        Если сайт начнёт отдавать ошибки, снизь до 4–8.
+      </p>
+      <div class="row">
+        <input id="threads" type="range" min="1" max="32" step="1" />
+        <b id="threads-val" class="val">16</b>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Только звук</h3>
+      <p class="hint">
+        Во что превращать звуковую дорожку. <b>m4a</b> — мгновенно, без
+        перекодирования. <b>mp3</b> — играет вообще везде, но требует пережатия.
+      </p>
+      <div class="row">
+        <select id="audioFormat">
+          <option value="m4a">m4a — быстро, как есть</option>
+          <option value="mp3">mp3 — совместимо со всем</option>
+          <option value="opus">opus — меньше всего весит</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Помощник</h3>
+      <div id="health" class="hint">проверяю…</div>
+      <div class="row">
+        <button id="recheck" class="ghost">Проверить ещё раз</button>
+      </div>
+    </div>
+
+    <p id="saved" class="saved" hidden>Сохранено</p>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

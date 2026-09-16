@@ -1,0 +1,74 @@
+body.page {
+  width: auto;
+  max-width: 720px;
+  max-height: none;
+  margin: 0 auto;
+  padding: 28px 24px 60px;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0 0 18px;
+}
+
+h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.card + .card {
+  margin-top: 14px;
+}
+
+.hint {
+  color: var(--dim);
+  font-size: 12px;
+  margin: 0 0 10px;
+}
+
+.hint b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.check i {
+  color: var(--dim);
+  font-style: normal;
+}
+
+input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+
+.val {
+  min-width: 2.5em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#folder {
+  flex: 1;
+  min-width: 260px;
+}
+
+.saved {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  background: var(--ok);
+  color: #06210f;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 12px;
+}

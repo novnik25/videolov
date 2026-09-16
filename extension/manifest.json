@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Видеолов",
+  "version": "1.0.0",
+  "description": "Находит видео на открытой странице и качает его в несколько потоков через локальный помощник (yt-dlp + ffmpeg).",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAxaYIIAvfkVolUsgGjrsMlamKTkKjJtRQO4wo36xfJz9voN+g+Jviay15ign/iPDLMjrODYNzPXSlUazVUyUadgajknqvVQlcqV5D0O4aiBvN7vEl5DLgt9keI1C46auYRIreVBKiv3tgRiWWdQcf9O7OOc1mGXJP7jXPMOhMHtswpsWGv5UCbEcW6Wb7JSWBFPHOF1pOfTFOprUv40EtuQT7JcVYbWhVLvTsC/ZcCV81f09KY8BWMQ6mpEs1rgSljyN5QYWXd0qekI3EMlZR8KPfngD6Bv0y1/1B6VOIFju/YaTAfxSmDD0PZfkdYYNU3V8wvNXmzYmOujxzSyORAQIDAQAB",
+  "permissions": [
+    "webRequest",
+    "storage",
+    "tabs",
+    "cookies",
+    "nativeMessaging"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/scan.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Видеолов",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

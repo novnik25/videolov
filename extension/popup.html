@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>Видеолов</title>
+  </head>
+  <body>
+    <header class="bar">
+      <span class="logo">Видеолов</span>
+      <span id="health" class="health" title="Состояние помощника">
+        <i class="dot"></i><span class="health-text">проверяю…</span>
+      </span>
+      <button id="settings" class="icon" title="Настройки">⚙</button>
+    </header>
+
+    <div id="alert" class="alert" hidden></div>
+
+    <main>
+      <section>
+        <h2>На этой странице <span id="found-count" class="count"></span></h2>
+        <div id="found" class="list"></div>
+        <p id="empty" class="empty">
+          Пока ничего не нашлось. Запусти видео на странице — поток появится здесь.
+        </p>
+      </section>
+
+      <section id="jobs-section" hidden>
+        <h2>Качается</h2>
+        <div id="jobs" class="list"></div>
+      </section>
+
+      <section id="history-section" hidden>
+        <h2>
+          Завершено
+          <button id="clear-history" class="link">очистить</button>
+        </h2>
+        <div id="history" class="list"></div>
+      </section>
+    </main>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
