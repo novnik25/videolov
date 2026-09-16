@@ -1,7 +1,14 @@
 // Поддельный браузер: говорит с host.js теми же кадрами, что и настоящий.
 const { spawn } = require("child_process");
+const fs = require("fs");
 const path = require("path");
 const os = require("os");
+
+// ⚠ Папку чистим ДО прогона. Иначе yt-dlp видит уже скачанный файл, честно его
+// пропускает — и проверка заканчивается словом «готово», не скачав ни байта.
+// Поймано 16.09.2026: тиков прогресса пришло ноль, а выглядело как успех.
+const OUT = path.join(os.tmpdir(), "videolov-host-test");
+fs.rmSync(OUT, { recursive: true, force: true });
 
 const HOST = "C:/Users/novos/OneDrive/Документы/Claude/Projects/Видеолов/helper/host.js";
 const child = spawn(process.execPath, [HOST], { windowsHide: true });
@@ -38,7 +45,7 @@ const job = {
   headers: { Referer: "https://разработчик.рф/курс/урок 1", "User-Agent": "Mozilla/5.0 (Windows NT 10.0)" },
   cookies: [{ domain: ".apple.com", path: "/", secure: true, expires: 0, name: "t", value: "1" }],
   settings: {
-    folder: path.join(os.tmpdir(), "videolov-host-test"),
+    folder: OUT,
     perSite: true,
     threads: 16,
     audioFormat: "m4a",
@@ -68,8 +75,10 @@ function onMessage(msg) {
   if (msg.t === "event") {
     console.log(`СОБЫТИЕ ${msg.kind}:`, JSON.stringify(msg));
     console.log("тиков прогресса:", ticks);
+    const real = msg.kind === "done" && ticks > 0;
+    if (!real) console.log("ПЛОХО: загрузки не было — прогресс не приходил");
     child.stdin.end();
-    setTimeout(() => process.exit(msg.kind === "done" ? 0 : 1), 300);
+    setTimeout(() => process.exit(real ? 0 : 1), 300);
   }
 }
 
