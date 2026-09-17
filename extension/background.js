@@ -16,7 +16,7 @@ import { BUILD } from "./lib/build.js";
 import { toFileName, nameFromUrl, siteFolder } from "./lib/title.js";
 import * as store from "./lib/store.js";
 import * as helper from "./lib/helper.js";
-import { probeHls, qualityLabel } from "./lib/hls.js";
+import { previewPlan, probeHls, qualityLabel } from "./lib/hls.js";
 
 /* ------------------------------------------------- подписки первым делом ---
  *
@@ -451,6 +451,11 @@ async function handlePopup(msg) {
       // ответ: значит он старый.
       return { build: BUILD };
 
+    case "preview": {
+      const item = await findItem(msg.tabId, msg.itemId);
+      return makePreview(item);
+    }
+
     case "health":
       return helper.health();
 
@@ -587,6 +592,56 @@ async function handlePopup(msg) {
     default:
       throw new Error(`неизвестная команда: ${msg?.cmd}`);
   }
+}
+
+/* ------------------------------------------------------------- обложки */
+
+/**
+ * Кадр из середины урока.
+ *
+ * ⚠ Обложка со страницы для курсов бесполезна: там нарисован модуль целиком
+ * («Модуль 3»), одна и та же картинка на десяток уроков — по ней не отличить,
+ * что скачиваешь. Кадр из середины показывает сам урок. Замечание владельца
+ * 17.09.2026.
+ *
+ * Делается по одному за раз: каждый кадр — это запущенный ffmpeg, и десяток
+ * сразу положил бы машину.
+ */
+const previews = new Map(); // id находки → обещание с адресом картинки
+let previewChain = Promise.resolve();
+
+function makePreview(item) {
+  const cached = previews.get(item.id);
+  if (cached) return cached;
+
+  const task = previewChain.then(
+    () => grabPreview(item),
+    () => grabPreview(item),
+  );
+  previews.set(item.id, task);
+  previewChain = task.catch(() => {});
+  return task;
+}
+
+async function grabPreview(item) {
+  if (item.kind === "page") return { dataUrl: "" };
+  const ctx = await jobContext(item);
+
+  let plan = { url: item.url, seek: 0 };
+  if (item.kind === "hls") {
+    try {
+      plan = await previewPlan(item.url);
+    } catch (e) {
+      console.warn("[видеолов] середину не вычислил:", e.message);
+    }
+  }
+
+  const data = await helper.call(
+    "preview",
+    { url: plan.url, seek: plan.seek, headers: ctx.headers, cookies: ctx.cookies },
+    60000,
+  );
+  return { dataUrl: data?.dataUrl || "" };
 }
 
 /* ---------------------------------------- вести от помощника о загрузках */

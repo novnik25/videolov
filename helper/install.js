@@ -22,13 +22,20 @@ const BROWSER_KEYS = [
   ["Edge", "HKCU\\Software\\Microsoft\\Edge\\NativeMessagingHosts"],
 ];
 
-const FILES = [
-  "host.js",
-  path.join("lib", "paths.js"),
-  path.join("lib", "ytdlp.js"),
-  path.join("lib", "cookies.js"),
-  path.join("lib", "shell.js"),
-];
+/**
+ * Что копировать.
+ * ⚠ Раньше здесь был список файлов вручную — и новый модуль в него забыли
+ * добавить: помощник установился, но падал на первом же запуске с «Cannot find
+ * module». Браузер показывал «помощник не отвечает», хотя дело было в
+ * установщике. Теперь берём папку lib целиком: забыть нечего.
+ */
+function filesToCopy(src) {
+  const lib = fs
+    .readdirSync(path.join(src, "lib"))
+    .filter((f) => f.endsWith(".js"))
+    .map((f) => path.join("lib", f));
+  return ["host.js", ...lib];
+}
 
 function main() {
   const src = __dirname;
@@ -39,10 +46,11 @@ function main() {
   say(`  куда:   ${dest}`);
 
   fs.mkdirSync(path.join(dest, "lib"), { recursive: true });
-  for (const rel of FILES) {
+  const files = filesToCopy(src);
+  for (const rel of files) {
     fs.copyFileSync(path.join(src, rel), path.join(dest, rel));
   }
-  say(`  скопировано файлов: ${FILES.length}`);
+  say(`  скопировано файлов: ${files.length} (${files.join(", ")})`);
 
   // Запускалка. Браузер умеет запускать только .exe/.bat, поэтому путь к node
   // зашиваем прямо сюда — PATH у запущенного браузером процесса бывает урезан.
@@ -97,6 +105,9 @@ function main() {
   // Сверка: читаем то, что записали. Путь содержит кириллицу, и молча
   // испортиться он может именно здесь.
   verify();
+  // И главное — ЗАПУСКАЕМ установленного помощника. Установка, которая не
+  // проверила работоспособность, врёт: файлы на месте, а модуля не хватает.
+  verifyRuns(dest);
 
   say("");
   say("Готово. Дальше — один раз поставить само расширение:");
@@ -121,6 +132,43 @@ function verify() {
   } catch (e) {
     say(`  сверка: не прочитался ключ (${e.message.split("\n")[0]})`);
   }
+}
+
+/**
+ * Поднять установленного помощника и спросить его о самочувствии.
+ * Кадр протокола — те же 4 байта длины и JSON, что шлёт браузер.
+ */
+function verifyRuns(dest) {
+  const { spawnSync } = require("child_process");
+  const body = Buffer.from(JSON.stringify({ t: "req", id: 1, cmd: "ping", args: {} }), "utf8");
+  const head = Buffer.alloc(4);
+  head.writeUInt32LE(body.length, 0);
+
+  const r = spawnSync(process.execPath, [path.join(dest, "host.js")], {
+    input: Buffer.concat([head, body]),
+    timeout: 30000,
+    windowsHide: true,
+  });
+  const out = r.stdout || Buffer.alloc(0);
+  if (out.length > 4) {
+    try {
+      const answer = JSON.parse(out.subarray(4, 4 + out.readUInt32LE(0)).toString("utf8"));
+      if (answer?.ok) {
+        const d = answer.data || {};
+        say(`  запуск: помощник отвечает (yt-dlp ${d.ytdlpVersion || "?"}, ffmpeg ${d.ffmpegVersion || "?"})`);
+        return;
+      }
+    } catch {
+      /* ниже скажем, что ответ невнятный */
+    }
+  }
+  const err = String(r.stderr || "")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(" | ");
+  say(`  ЗАПУСК НЕ УДАЛСЯ: ${err || "помощник промолчал"}`);
+  process.exitCode = 1;
 }
 
 function say(s) {

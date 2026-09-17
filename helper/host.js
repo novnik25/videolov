@@ -11,6 +11,7 @@
 const { tools, versionOf } = require("./lib/paths.js");
 const ytdlp = require("./lib/ytdlp.js");
 const shell = require("./lib/shell.js");
+const preview = require("./lib/preview.js");
 
 const MAX_FRAME = 64 * 1024 * 1024;
 
@@ -73,6 +74,9 @@ function handle(msg) {
     switch (cmd) {
       case "ping":
         return reply(id, ping());
+
+      case "preview":
+        return preview.grabFrame(args, (err, data) => (err ? fail(id, err) : reply(id, data)));
 
       case "probe":
         return ytdlp.probe(args, (err, data) => (err ? fail(id, err) : reply(id, data)));
@@ -142,5 +146,16 @@ function cancelJob(jobId) {
 process.on("uncaughtException", (e) => {
   process.stderr.write(`[видеолов] непойманная ошибка: ${e.stack || e}\n`);
 });
+
+// Разовая уборка обрывков прошлых прерванных загрузок: убирать их больше
+// некому — процесса, который их создал, давно нет.
+try {
+  const swept = ytdlp.sweepStale(tools().downloads);
+  // console.error сам ставит перевод строки. В stdout нельзя ни байта — он
+  // занят протоколом связи с браузером.
+  if (swept) console.error(`[видеолов] убрано старых обрывков: ${swept}`);
+} catch (e) {
+  console.error(`[видеолов] уборка не удалась: ${e.message}`);
+}
 
 process.stderr.write("[видеолов] помощник поднялся\n");

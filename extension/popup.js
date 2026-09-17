@@ -11,6 +11,8 @@ const opened = new Set(); // какие карточки раскрыты
 const modes = new Map(); // id находки → выбранный режим
 const names = new Map(); // id находки → имя, которое правит человек
 const painted = new Set(); // что уже показывали: повторно не анимируем
+const posters = new Map(); // id находки → кадр из середины ролика
+const asked = new Set(); // у кого кадр уже заказан — чтобы не просить дважды
 
 /* --------------------------------------------------------------- значки */
 
@@ -179,12 +181,39 @@ function renderFound() {
   state.found.forEach((item, i) => box.append(foundCard(item, i)));
 }
 
+/**
+ * Кадр из середины ролика — заказываем лениво, по одному.
+ * ⚠ Картинка со страницы для курсов бесполезна: там нарисован модуль целиком,
+ * одна и та же на десяток уроков. Поэтому для потоков берём НЕ её, а кадр.
+ * Для известных площадок (ютуб и прочие) страничная обложка как раз верная —
+ * там она принадлежит конкретному ролику.
+ */
+function posterFor(item) {
+  if (item.kind === "page") return item.poster || "";
+  return posters.get(item.id) || "";
+}
+
+function ensurePoster(item) {
+  if (item.kind === "page" || posters.has(item.id) || asked.has(item.id)) return;
+  asked.add(item.id);
+  send("preview", { itemId: item.id })
+    .then((d) => {
+      if (!d?.dataUrl) return;
+      posters.set(item.id, d.dataUrl);
+      render();
+    })
+    .catch(() => {
+      /* кадра не будет — останется метка формата */
+    });
+}
+
 function foundCard(item, index) {
   const card = el("div", "card");
   stagger(card, `f:${item.id}`, index);
+  ensurePoster(item);
 
   const head = el("div", "card-head");
-  head.append(thumb(item.poster, item.label));
+  head.append(thumb(posterFor(item), item.label));
   const titleBox = el("div", "title");
   titleBox.append(el("div", null, item.name || item.title || "без названия"));
   titleBox.append(el("div", "sub", shortUrl(item.url)));
@@ -288,7 +317,7 @@ function foundCard(item, index) {
       await send("download", {
         itemId: item.id,
         name: nameInput.value.trim() || item.name,
-        poster: item.poster || "",
+        poster: posterFor(item) || item.poster || "",
         mode: modes.get(item.id) || "av",
         formatId: pick.id || "",
         height: pick.height || 0,

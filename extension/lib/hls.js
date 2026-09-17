@@ -91,6 +91,42 @@ export async function probeHls(url) {
   return { variants: bestPerHeight(parseMaster(text, url)), single: false };
 }
 
+/**
+ * Длительность потока — сумма длительностей кусков из плейлиста качества.
+ * ⚠ Не спрашиваем у ffprobe: на HLS он честно раскручивает дорожку и тратит
+ * больше минуты (замерено 17.09.2026: 68 с). В плейлисте же всё написано:
+ * каждая строка #EXTINF:6.000 — это длина куска. Сумма и есть длительность.
+ */
+export function playlistDuration(text) {
+  let total = 0;
+  for (const line of String(text).split(/\r?\n/)) {
+    const m = line.match(/^#EXTINF:\s*([\d.]+)/);
+    if (m) total += Number(m[1]) || 0;
+  }
+  return total;
+}
+
+/**
+ * Что скачать ради ОДНОГО кадра: самое лёгкое качество и середина ролика.
+ * Тяжёлое качество ради картинки 320 пикселей шириной тянуть незачем.
+ */
+export async function previewPlan(url) {
+  const res = await fetch(url, { credentials: "include" });
+  if (!res.ok) throw new Error(`плейлист отдал ${res.status}`);
+  const text = await res.text();
+  if (!looksLikePlaylist(text)) throw new Error("это не плейлист");
+
+  if (!isMaster(text)) return { url, seek: playlistDuration(text) / 2 };
+
+  const variants = parseMaster(text, url);
+  if (!variants.length) throw new Error("в мастере нет качеств");
+  const lightest = variants[variants.length - 1];
+
+  const inner = await fetch(lightest.url, { credentials: "include" });
+  if (!inner.ok) throw new Error(`качество отдало ${inner.status}`);
+  return { url: lightest.url, seek: playlistDuration(await inner.text()) / 2 };
+}
+
 /** Подпись качества для списка: «1080p», «720p», «исходное». */
 export function qualityLabel(v) {
   if (v.height) return `${v.height}p`;

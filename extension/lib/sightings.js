@@ -32,20 +32,45 @@ let segmentSamples = [];
 let counters = empty();
 let dirty = false;
 let timer = null;
-let loaded = false;
+let loading = null;
 
-/** Поднимаем журнал с прошлого пробуждения: фоновый скрипт засыпает каждые 30 с. */
-async function ensureLoaded() {
-  if (loaded) return;
-  loaded = true;
-  try {
-    const got = await area.get(["sightings", "sightSamples", "sightCounters"]);
-    if (Array.isArray(got.sightings)) ring = got.sightings;
-    if (Array.isArray(got.sightSamples)) segmentSamples = got.sightSamples;
-    if (got.sightCounters) counters = got.sightCounters;
-  } catch {
-    /* хранилище сессии могло ещё не завестись */
-  }
+/**
+ * Поднимаем журнал с прошлого пробуждения: фоновый скрипт засыпает каждые 30 с.
+ *
+ * ⚠ Общее ОБЕЩАНИЕ, а не флаг. Первая версия ставила `loaded = true` и уходила
+ * ждать хранилище; остальные вызовы видели флаг, считали загрузку законченной
+ * и писали в ring — а вернувшаяся загрузка затирала ring прочитанным, то есть
+ * пустым. Терялись ровно первые записи, самые нужные. Поймано плавающим
+ * падением проверки 17.09.2026.
+ */
+function ensureLoaded() {
+  if (loading) return loading;
+  loading = (async () => {
+    try {
+      const got = await area.get(["sightings", "sightSamples", "sightCounters"]);
+      // Прочитанное ДОПОЛНЯЕТ уже накопленное, а не заменяет его.
+      if (Array.isArray(got.sightings) && got.sightings.length) {
+        ring = got.sightings.concat(ring).slice(-MAX);
+      }
+      if (Array.isArray(got.sightSamples) && !segmentSamples.length) {
+        segmentSamples = got.sightSamples;
+      }
+      if (got.sightCounters) {
+        const saved = got.sightCounters;
+        counters = {
+          seen: (saved.seen || 0) + counters.seen,
+          taken: (saved.taken || 0) + counters.taken,
+          dropped: (saved.dropped || 0) + counters.dropped,
+          segments: (saved.segments || 0) + counters.segments,
+          startedAt: saved.startedAt || counters.startedAt,
+          perTab: { ...(saved.perTab || {}), ...counters.perTab },
+        };
+      }
+    } catch {
+      /* хранилище сессии могло ещё не завестись */
+    }
+  })();
+  return loading;
 }
 
 function flushSoon() {
@@ -130,6 +155,7 @@ export async function readLog() {
 
 export async function clearLog() {
   await ensureLoaded();
+  loading = Promise.resolve(); // прочитанное больше не нужно: журнал обнуляем
   ring = [];
   segmentSamples = [];
   counters = empty();

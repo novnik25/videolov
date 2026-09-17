@@ -14,7 +14,7 @@ import shutil
 import sys
 import tempfile
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -113,7 +113,11 @@ def check(name, ok, detail=""):
 
 
 def main():
-    server = HTTPServer(("127.0.0.1", PORT), Handler)
+    # ⚠ Сервер ОБЯЗАН быть многопоточным. Страница тянет плейлисты одновременно,
+    # и расширение тут же читает их само, чтобы опознать. Однопоточный сервер
+    # обслуживает всё по очереди — одна из проверок изредка не успевала, и
+    # мастер-плейлист терялся. Это был изъян стенда, а не расширения.
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     profile = tempfile.mkdtemp(prefix="videolov-gc-")
 
@@ -146,18 +150,34 @@ def run(ctx):
             break
         ctx.wait_for_event("serviceworker", timeout=2000)
     sw = ctx.service_workers[0]
+    # ⚠ Мало дождаться служебного скрипта — надо дождаться, пока он ПОДПИШЕТСЯ
+    # на трафик. До этого мгновения запросы страницы проходят мимо, и проверка
+    # падает «ничего не найдено» на ровном месте. В жизни это тот самый случай
+    # «расширение только поставили — обнови страницу».
+    for _ in range(40):
+        if sw.evaluate("() => chrome.webRequest.onBeforeRequest.hasListeners()"):
+            break
+        sw.evaluate("() => new Promise((r) => setTimeout(r, 250))")
 
     page = ctx.new_page()
     page.goto(f"http://127.0.0.1:{PORT}/", wait_until="networkidle")
-    page.wait_for_timeout(3500)
 
     tab_id = sw.evaluate(
         "async () => (await chrome.tabs.query({active: true, currentWindow: true}))[0].id"
     )
-    found = sw.evaluate(
-        "async (id) => (await chrome.storage.session.get(`found:${id}`))[`found:${id}`] || []",
-        tab_id,
-    )
+
+    # ⚠ Ждём РЕЗУЛЬТАТА, а не отмеренных секунд. Плейлист узнаётся чтением, то
+    # есть через сеть, и на занятой машине это заметно дольше. Фиксированная
+    # пауза давала осечку примерно раз на пять прогонов.
+    found = []
+    for _ in range(40):
+        found = sw.evaluate(
+            "async (id) => (await chrome.storage.session.get(`found:${id}`))[`found:${id}`] || []",
+            tab_id,
+        )
+        if len(found) >= 2:
+            break
+        page.wait_for_timeout(500)
     for f in found:
         print(f"      найдено: [{f['kind']}] {f['url'][:95]}")
 
@@ -185,9 +205,17 @@ def run(ctx):
         item["name"],
     )
 
-    counters = sw.evaluate(
-        "async () => (await chrome.storage.session.get('sightCounters')).sightCounters || {}"
-    )
+    # ⚠ Счётчики журнала сохраняются с задержкой (пачкой раз в полторы
+    # секунды, чтобы не дёргать хранилище на каждый запрос). Читать их сразу
+    # после появления находок рано — ждём, пока доедут.
+    counters = {}
+    for _ in range(30):
+        counters = sw.evaluate(
+            "async () => (await chrome.storage.session.get('sightCounters')).sightCounters || {}"
+        )
+        if counters.get("segments", 0) >= 2:
+            break
+        page.wait_for_timeout(500)
     check("куски посчитаны как куски", counters.get("segments", 0) >= 2, counters)
     print(f"      счётчики: {counters.get('seen')} всего, {counters.get('taken')} видео, "
           f"{counters.get('segments')} кусков")

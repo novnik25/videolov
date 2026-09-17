@@ -14,7 +14,7 @@ import sys
 import tempfile
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
@@ -69,7 +69,11 @@ def check(name, ok, detail=""):
 
 
 def main():
-    server = HTTPServer(("127.0.0.1", PORT), Handler)
+    # ⚠ Сервер ОБЯЗАН быть многопоточным. Страница тянет плейлисты одновременно,
+    # и расширение тут же читает их само, чтобы опознать. Однопоточный сервер
+    # обслуживает всё по очереди — одна из проверок изредка не успевала, и
+    # мастер-плейлист терялся. Это был изъян стенда, а не расширения.
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
     out_dir = Path(tempfile.gettempdir()) / "videolov-live"
@@ -343,6 +347,28 @@ def run(ctx, out_dir):
     check_cancel(popup, tab_id, item)
     check("кнопки истории со значками", popup.locator("#downloads .card button svg").count() >= 3)
     check("обложка или метка на месте", popup.locator("#downloads .card .thumb").count() >= 1)
+
+    # Кадр из середины ролика: он должен приехать и стать картинкой в списке.
+    popup.wait_for_timeout(1000)
+    got_frame = False
+    for _ in range(40):
+        if popup.locator("#found .thumb img").count() > 0:
+            got_frame = True
+            break
+        popup.wait_for_timeout(1000)
+    check("кадр из середины подставлен в список", got_frame, "картинка так и не появилась")
+    if got_frame:
+        src = popup.locator("#found .thumb img").first.get_attribute("src")
+        check("кадр пришёл картинкой, а не ссылкой", src.startswith("data:image/jpeg"), src[:40])
+        size = popup.evaluate(
+            """() => {
+          const i = document.querySelector('#found .thumb img');
+          return i ? {w: i.naturalWidth, h: i.naturalHeight} : null;
+        }"""
+        )
+        check("кадр разборчив", size and size["w"] >= 200, size)
+        print(f"      кадр: {size}")
+        popup.screenshot(path=str(ROOT / "docs" / "окно-с-обложкой.png"))
     popup.screenshot(path=str(ROOT / "docs" / "окно-история.png"))
 
 
