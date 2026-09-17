@@ -660,8 +660,16 @@ async function grabPreview(item) {
 
   const data = await helper.call(
     "preview",
-    { url: plan.url, seek: plan.seek, headers: ctx.headers, cookies: ctx.cookies },
-    60000,
+    {
+      url: plan.url,
+      seek: plan.seek,
+      // Подсказка о формате: без неё ffmpeg не открывает плейлист, отданный
+      // без расширения .m3u8 и с посторонним типом содержимого.
+      hls: item.kind === "hls",
+      headers: ctx.headers,
+      cookies: ctx.cookies,
+    },
+    90000,
   );
   return { dataUrl: data?.dataUrl || "" };
 }

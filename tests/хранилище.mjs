@@ -5,7 +5,15 @@
 // список найденного всегда читается пустым — и выглядит это как «расширение
 // ничего не находит».
 
-const BASE = "file:///C:/Users/novos/OneDrive/Документы/Claude/Projects/Видеолов/extension/lib/area.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import path from "node:path";
+
+// Путь считаем ОТ ЭТОГО ФАЙЛА: проект должен работать из любой папки на
+// любом компьютере, а не из единственной, где его когда-то писали.
+const LIB = pathToFileURL(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "extension", "lib") + path.sep,
+).href;
+const BASE = LIB;
 
 let bad = 0;
 const check = (name, ok, detail = "") => {
@@ -38,7 +46,7 @@ let seq = 0;
 async function freshArea(session, local) {
   globalThis.chrome = { storage: { session, local } };
   delete globalThis.__videolovBoot;
-  return import(`${BASE}?v=${++seq}`); // модуль кеширует выбор — берём новый
+  return import(`${BASE}area.js?v=${++seq}`); // модуль кеширует выбор — берём новый
 }
 
 /* 1. Здоровая session — работаем в ней. */

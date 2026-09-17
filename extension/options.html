@@ -26,19 +26,25 @@
         </svg>
         <div>
           <h1>Видеолов</h1>
-          <p class="lead">Настройки загрузки</p>
+          <p class="lead">Параметры загрузки</p>
         </div>
       </header>
 
       <section class="card">
-        <h3>Куда сохранять</h3>
+        <h3>Папка загрузок</h3>
         <p class="hint">
-          Не выбрано — файлы лягут в <b>Загрузки\Видеолов</b>.
+          Куда сохранять готовые файлы. По умолчанию — <b>Загрузки\Видеолов</b>.
         </p>
         <div class="row">
-          <input id="folder" type="text" placeholder="Загрузки\Видеолов" readonly aria-label="Папка сохранения" />
+          <input
+            id="folder"
+            type="text"
+            placeholder="Загрузки\Видеолов"
+            readonly
+            aria-label="Папка загрузок"
+          />
           <button id="pick" class="ghost">Выбрать…</button>
-          <button id="reset-folder" class="ghost">Сбросить</button>
+          <button id="reset-folder" class="ghost">По умолчанию</button>
         </div>
 
         <label class="switch-row" for="perSite">
@@ -47,45 +53,58 @@
             <i aria-hidden="true"></i>
           </span>
           <span class="switch-text">
-            Раскладывать по папкам сайта
-            <span class="hint">…\Видеолов\curs.kudryavtsevtony.ru\Урок 2.mp4</span>
+            Раскладывать по папкам источников
+            <span class="hint">…\Видеолов\example-school.ru\Урок 2.mp4</span>
           </span>
         </label>
       </section>
 
       <section class="card">
-        <h3>Скорость</h3>
+        <h3>Параллельные соединения</h3>
         <p class="hint">
-          Сколько кусков потока тянуть одновременно. Это и есть главный разгон: один
-          поток — как у обычных качалок, шестнадцать — во весь канал. Если сайт начнёт
-          отвечать ошибками, снизь до 4–8.
+          Сколько фрагментов потока загружать одновременно. Чем больше — тем выше
+          скорость. Если источник начинает отклонять запросы, уменьшите до 4–8.
+          Рекомендуемое значение — 16.
         </p>
         <div class="row slider-row">
-          <input id="threads" type="range" min="1" max="32" step="1" aria-label="Потоков загрузки" />
+          <input
+            id="threads"
+            type="range"
+            min="1"
+            max="32"
+            step="1"
+            aria-label="Параллельные соединения"
+          />
           <b id="threads-val" class="val">16</b>
         </div>
       </section>
 
       <section class="card">
-        <h3>Только звук</h3>
+        <h3>Формат звуковой дорожки</h3>
         <p class="hint">
-          Во что превращать звуковую дорожку. <b>m4a</b> — мгновенно, без
-          перекодирования. <b>mp3</b> — играет вообще везде, но требует пережатия.
+          Применяется в режиме «Только звук». <b>m4a</b> сохраняется без
+          перекодирования — быстро и без потери качества. <b>mp3</b> совместим с
+          любым плеером. <b>opus</b> занимает меньше места.
         </p>
         <div class="row">
-          <select id="audioFormat" aria-label="Формат звука">
-            <option value="m4a">m4a — быстро, как есть</option>
-            <option value="mp3">mp3 — совместимо со всем</option>
-            <option value="opus">opus — меньше всего весит</option>
+          <select id="audioFormat" aria-label="Формат звуковой дорожки">
+            <option value="m4a">m4a — без перекодирования</option>
+            <option value="mp3">mp3 — максимальная совместимость</option>
+            <option value="opus">opus — минимальный размер</option>
           </select>
         </div>
       </section>
 
       <section class="card">
-        <h3>Помощник</h3>
-        <div id="health" class="hint mono">проверяю…</div>
+        <h3>Локальный загрузчик</h3>
+        <p class="hint">
+          Компонент, который выполняет загрузку на этом компьютере. Версии
+          используемых программ:
+        </p>
+        <div id="health" class="hint mono">проверка…</div>
         <div class="row">
-          <button id="recheck" class="ghost">Проверить ещё раз</button>
+          <button id="recheck" class="ghost">Проверить снова</button>
+          <button id="open-downloads" class="ghost">Открыть папку загрузок</button>
         </div>
       </section>
     </div>

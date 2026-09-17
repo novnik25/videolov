@@ -77,22 +77,33 @@ async function health() {
   try {
     const h = await send("health");
     if (!h.ok) {
-      box.textContent = `Помощник не отвечает: ${h.error}. Запусти установщик helper\\установить.bat из папки проекта.`;
+      box.textContent = `Локальный загрузчик не отвечает: ${h.error}. Выполните установку: helper\\установить.bat`;
       return;
     }
     const bits = [
-      h.ytdlp ? `yt-dlp ${h.ytdlpVersion || ""}`.trim() : "yt-dlp НЕ НАЙДЕН",
-      h.ffmpeg ? `ffmpeg ${h.ffmpegVersion || ""}`.trim() : "ffmpeg НЕ НАЙДЕН",
-      `узел ${h.node || "?"}`,
-      `папка по умолчанию: ${h.downloadsDir || "?"}`,
+      h.ytdlp ? `yt-dlp ${h.ytdlpVersion || ""}`.trim() : "yt-dlp не найден",
+      h.ffmpeg ? `ffmpeg ${h.ffmpegVersion || ""}`.trim() : "ffmpeg не найден",
+      `Node.js ${h.node || "?"}`,
     ];
     box.textContent = bits.join(" · ");
   } catch (e) {
-    box.textContent = `Помощник не отвечает: ${e.message}`;
+    box.textContent = `Локальный загрузчик не отвечает: ${e.message}`;
   }
 }
 
 $("#recheck").addEventListener("click", health);
+
+// Открыть папку загрузок — чтобы не искать её в проводнике вручную.
+$("#open-downloads").addEventListener("click", async () => {
+  try {
+    const h = await send("health");
+    const state = await send("state");
+    const folder = state.settings?.folder || h.downloadsDir;
+    if (folder) await send("open-folder", { path: folder });
+  } catch (e) {
+    alert(`Не удалось открыть папку: ${e.message}`);
+  }
+});
 
 void load();
 void health();

@@ -16,7 +16,16 @@ const path = require("path");
  * Поймано по жалобе: кнопка «Папка» не открывала папку. 16.09.2026.
  */
 function explorerArgs(file) {
-  return fs.existsSync(file) ? `/select,"${file}"` : `"${path.dirname(file)}"`;
+  let stat = null;
+  try {
+    stat = fs.statSync(file);
+  } catch {
+    /* пути нет — откроем родительскую папку */
+  }
+  // Папку открываем, а не «выделяем»: выделение показало бы её в родительской.
+  if (stat?.isDirectory()) return `"${file}"`;
+  if (stat) return `/select,"${file}"`;
+  return `"${path.dirname(file)}"`;
 }
 
 /** Показать файл в проводнике (выделенным). */

@@ -190,7 +190,9 @@ function renderFound() {
  */
 function posterFor(item) {
   if (item.kind === "page") return item.poster || "";
-  return posters.get(item.id) || "";
+  // ⚠ Кадр — предпочтительнее, но если вырезать его не вышло, показываем
+  // обложку страницы. Пустая рамка не лучше неточной картинки.
+  return posters.get(item.id) || item.poster || "";
 }
 
 function ensurePoster(item) {
@@ -517,13 +519,13 @@ async function checkStaleBuild() {
   if (!stale) return false;
   const box = $("#alert");
   box.replaceChildren(
-    el("div", null, `Расширение работает на старой начинке (${running}). Правки не действуют.`),
+    el("div", null, `Расширение работает на устаревшей версии (${running}). Обновления не применены.`),
   );
   const btn = el("button", "go", "Перезапустить");
   btn.style.marginTop = "10px";
   btn.addEventListener("click", () => {
     btn.disabled = true;
-    btn.textContent = "перезапускаю…";
+    btn.textContent = "перезапуск…";
     restart();
   });
   box.append(btn);
@@ -538,26 +540,26 @@ async function checkHealth() {
     const h = await send("health");
     if (h.ok && h.ytdlp && h.ffmpeg) {
       box.classList.add("ok");
-      text.textContent = "помощник на месте";
+      text.textContent = "загрузчик готов";
       return;
     }
     box.classList.add("bad");
     if (!h.ok) {
-      text.textContent = "помощника нет";
+      text.textContent = "загрузчик недоступен";
       const a = $("#alert");
       a.replaceChildren(
-        el("div", null, "Помощник не отвечает. Он ставится один раз — запусти установщик:"),
+        el("div", null, "Локальный загрузчик не отвечает. Установка выполняется один раз:"),
         el("code", null, "Видеолов\\helper\\установить.bat"),
       );
       a.hidden = false;
       return;
     }
-    text.textContent = "не хватает программ";
+    text.textContent = "не хватает компонентов";
     const miss = [!h.ytdlp && "yt-dlp", !h.ffmpeg && "ffmpeg"].filter(Boolean).join(" и ");
-    showAlert(`Помощник работает, но не нашёл ${miss}.`);
+    showAlert(`Загрузчик работает, но не нашёл ${miss}. Установите недостающее и нажмите «Проверить снова» в настройках.`);
   } catch (e) {
     box.classList.add("bad");
-    text.textContent = "помощника нет";
+    text.textContent = "загрузчик недоступен";
     showAlert(e.message);
   }
 }

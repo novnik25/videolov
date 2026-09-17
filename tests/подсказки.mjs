@@ -19,7 +19,15 @@ globalThis.chrome = {
   },
 };
 
-const BASE = "file:///C:/Users/novos/OneDrive/Документы/Claude/Projects/Видеолов/extension/lib/";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import path from "node:path";
+
+// Путь считаем ОТ ЭТОГО ФАЙЛА: проект должен работать из любой папки на
+// любом компьютере, а не из единственной, где его когда-то писали.
+const LIB = pathToFileURL(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "extension", "lib") + path.sep,
+).href;
+const BASE = LIB;
 const s = await import(BASE + "sightings.js");
 
 let bad = 0;

@@ -194,7 +194,7 @@ def run(ctx, out_dir):
     print(f"      хранилище: {sc.get('storage', {}).get('probe')}")
 
     health = popup.inner_text(".health-text").lower()
-    check("окно докладывает о помощнике", "на месте" in health, health)
+    check("окно докладывает о загрузчике", "готов" in health, health)
     # Свежая начинка не должна показывать плашку «расширение устарело».
     check("плашки об устаревшей начинке нет", "старой начинке" not in popup.inner_text("body"),
           popup.inner_text("#alert") if popup.locator("#alert").count() else "")
@@ -246,8 +246,8 @@ def run(ctx, out_dir):
     opts.set_viewport_size({"width": 760, "height": 720})
     opts.goto(f"chrome-extension://{EXT_ID}/options.html")
     opts.wait_for_timeout(2500)
-    check("настройки открылись", opts.locator(".card").count() == 4)
-    check("помощник виден и в настройках", "yt-dlp" in opts.inner_text("#health"), opts.inner_text("#health"))
+    check("настройки открылись", opts.locator(".card").count() == 4, opts.locator(".card").count())
+    check("версии программ видны в настройках", "yt-dlp" in opts.inner_text("#health"), opts.inner_text("#health"))
     # Настройки обязаны показывать то, что лежит в хранилище: разойдясь,
     # страница обещает одно, а загрузка делает другое.
     check("формат звука совпадает с сохранённым", opts.locator("#audioFormat").input_value() == "m4a",

@@ -1,5 +1,13 @@
 // Проверка распознавания: что считаем видео, что — мусором.
-const BASE = "file:///C:/Users/novos/OneDrive/Документы/Claude/Projects/Видеолов/extension/lib/";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import path from "node:path";
+
+// Путь считаем ОТ ЭТОГО ФАЙЛА: проект должен работать из любой папки на
+// любом компьютере, а не из единственной, где его когда-то писали.
+const LIB = pathToFileURL(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "extension", "lib") + path.sep,
+).href;
+const BASE = LIB;
 const { classify, classifyDetailed, dedupKey, isInsideOf, isKnownSite } = await import(BASE + "detect.js");
 const { parseMaster, isMaster, bestPerHeight } = await import(BASE + "hls.js");
 
@@ -42,7 +50,7 @@ check(
 // --- известные площадки ---
 check("ютуб", isKnownSite("https://www.youtube.com/watch?v=abc"), true);
 check("вк видео", isKnownSite("https://vkvideo.ru/video-1_2"), true);
-check("курс — не известная площадка", isKnownSite("https://curs.kudryavtsevtony.ru/lesson/2"), false);
+check("курс — не известная площадка", isKnownSite("https://lms.example.ru/lesson/2"), false);
 
 // --- разбор мастер-плейлиста ---
 const master = `#EXTM3U

@@ -6,7 +6,15 @@
 // расхождение должно ловиться само. Проверяем ВСЕ способы, которыми старая
 // начинка себя выдаёт: другая отметка, отказ отвечать, незнакомая команда.
 
-const BASE = "file:///C:/Users/novos/OneDrive/Документы/Claude/Projects/Видеолов/extension/lib/";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import path from "node:path";
+
+// Путь считаем ОТ ЭТОГО ФАЙЛА: проект должен работать из любой папки на
+// любом компьютере, а не из единственной, где его когда-то писали.
+const LIB = pathToFileURL(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "extension", "lib") + path.sep,
+).href;
+const BASE = LIB;
 
 let bad = 0;
 const check = (name, ok, detail = "") => {

@@ -10,7 +10,8 @@ const os = require("os");
 const OUT = path.join(os.tmpdir(), "videolov-host-test");
 fs.rmSync(OUT, { recursive: true, force: true });
 
-const HOST = "C:/Users/novos/OneDrive/Документы/Claude/Projects/Видеолов/helper/host.js";
+// Путь считаем от этого файла: проект переносим целиком, без правок.
+const HOST = path.join(__dirname, "..", "helper", "host.js");
 const child = spawn(process.execPath, [HOST], { windowsHide: true });
 
 child.stderr.on("data", (d) => process.stdout.write("[stderr] " + d));
