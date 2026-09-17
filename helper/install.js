@@ -11,7 +11,24 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 
 const HOST_NAME = "ru.videolov.helper";
-const EXT_ID = "bddbplfelcdknmmmbidbeecominenlcg";
+
+/**
+ * Кому разрешено обращаться к загрузчику.
+ * ⚠ Список лежит в отдельном файле, а не в коде: идентификатор расширения
+ * зависит от способа установки. Распакованное получает его из открытого ключа
+ * в манифесте, опубликованное в магазине — от магазина. Чтобы одна и та же
+ * установка работала в обоих случаях, список правится без правки кода.
+ */
+function allowedIds() {
+  try {
+    const file = path.join(__dirname, "allowed-extensions.json");
+    const list = JSON.parse(fs.readFileSync(file, "utf8")).ids;
+    if (Array.isArray(list) && list.length) return list;
+  } catch (e) {
+    say(`  список расширений не прочитался (${e.message}) — беру встроенный`);
+  }
+  return ["bddbplfelcdknmmmbidbeecominenlcg"];
+}
 
 // Ветки реестра браузеров на движке Chromium. Пишем во все: какой запущен,
 // такой и подхватит. Лишние ключи никому не мешают.
@@ -34,7 +51,7 @@ function filesToCopy(src) {
     .readdirSync(path.join(src, "lib"))
     .filter((f) => f.endsWith(".js"))
     .map((f) => path.join("lib", f));
-  return ["host.js", ...lib];
+  return ["host.js", "allowed-extensions.json", ...lib];
 }
 
 function main() {
@@ -62,7 +79,9 @@ function main() {
   );
   say(`  запускалка: ${bat}`);
 
-  // Манифест помощника: кому разрешено к нему обращаться.
+  // Манифест загрузчика: кому разрешено к нему обращаться.
+  const ids = allowedIds();
+  say(`  разрешённые расширения: ${ids.join(", ")}`);
   const manifest = path.join(dest, `${HOST_NAME}.json`);
   fs.writeFileSync(
     manifest,
@@ -72,7 +91,7 @@ function main() {
         description: "Видеолов — загрузка видео через yt-dlp",
         path: bat,
         type: "stdio",
-        allowed_origins: [`chrome-extension://${EXT_ID}/`],
+        allowed_origins: ids.map((id) => `chrome-extension://${id}/`),
       },
       null,
       2,

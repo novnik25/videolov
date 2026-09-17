@@ -5,3 +5,6 @@ extension-id.json
 
 node_modules/
 *.log
+
+# Пакет для магазина собирается командой и в репозитории не нужен.
+build/
