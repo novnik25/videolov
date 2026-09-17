@@ -488,6 +488,15 @@ function showAlert(msgOrErr) {
 /* ----------------------------------------------------------- запуск */
 
 $("#settings").addEventListener("click", () => chrome.runtime.openOptionsPage());
+// ⚠ Самое частое лекарство — перезагрузка страницы: плеер запрашивает
+// плейлист ОДИН раз, при загрузке, и если расширение включилось позже, ловить
+// уже нечего. Кнопка избавляет от объяснений «нажми F5».
+$("#reload-tab").addEventListener("click", async () => {
+  if (tabId == null) return;
+  await chrome.tabs.reload(tabId);
+  window.close();
+});
+
 $("#why").addEventListener("click", () => {
   chrome.tabs.create({ url: chrome.runtime.getURL("diag.html") });
   window.close();

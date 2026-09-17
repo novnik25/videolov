@@ -368,6 +368,23 @@ def run(ctx, out_dir):
         )
         check("кадр разборчив", size and size["w"] >= 200, size)
         print(f"      кадр: {size}")
+
+        # ⚠ Повторный заказ обязан прийти ИЗ ПАМЯТИ, без запуска ffmpeg: иначе
+        # при каждом открытии окна машина заново режет кадр четыре секунды.
+        # Заодно это ловит взаимоблокировку — очередь, ждущую саму себя.
+        again_started = time.time()
+        again = popup.evaluate(
+            """async ({tabId, itemId}) => new Promise((r) =>
+          chrome.runtime.sendMessage({cmd: "preview", tabId, itemId}, r))""",
+            {"tabId": tab_id, "itemId": item["id"]},
+        )
+        took_again = time.time() - again_started
+        check("повторный кадр отдан", bool(again and again.get("ok")), again)
+        if again and again.get("ok"):
+            check("кадр взят из памяти, а не вырезан заново", took_again < 2.0,
+                  f"{took_again:.1f} с")
+            check("кадр тот же самый", again["data"]["dataUrl"] == src, "картинка изменилась")
+            print(f"      повторный кадр за {took_again:.2f} с")
         popup.screenshot(path=str(ROOT / "docs" / "окно-с-обложкой.png"))
     popup.screenshot(path=str(ROOT / "docs" / "окно-история.png"))
 

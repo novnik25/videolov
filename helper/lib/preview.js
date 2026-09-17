@@ -32,9 +32,19 @@ function headerBlock(headers, cookies) {
 }
 
 /** Та же беда, что у yt-dlp: символы вне latin-1 ломают заголовок. */
+// Символы вне latin-1. Пишется явной записью, а не литералом с
+// экзотическими знаками: в литерал однажды просочился NUL, диапазон
+// «пробел..ÿ» стал «NUL..ÿ» и перестал отсекать управляющие символы,
+// а сам файл перестал считаться текстовым.
+// ⚠ Два выражения, а не одно с флагом g: выражение с g ПОМНИТ позицию
+// последнего совпадения, и .test() на нём через раз возвращает ложь на той
+// же самой строке. Для проверки — без флага, для замены — с флагом.
+const LATIN1_TEST = new RegExp("[^\\u0020-\\u00ff]");
+const LATIN1_ALL = new RegExp("[^\\u0020-\\u00ff]", "g");
+
 function latin1(value) {
   const s = String(value == null ? "" : value);
-  if (!/[^ -ÿ]/.test(s)) return s;
+  if (!LATIN1_TEST.test(s)) return s;
   if (/^https?:\/\//i.test(s)) {
     try {
       return encodeURI(s);
@@ -42,7 +52,7 @@ function latin1(value) {
       /* чистим ниже */
     }
   }
-  return s.replace(/[^ -ÿ]/g, "");
+  return s.replace(LATIN1_ALL, "");
 }
 
 /**

@@ -61,7 +61,19 @@ process.stdin.on("data", (chunk) => {
 // Браузер закрыл соединение — уносим с собой все незавершённые загрузки,
 // иначе yt-dlp останется писать файл, о котором никто не знает.
 process.stdin.on("end", () => {
-  for (const { child } of jobs.values()) ytdlp.killTree(child);
+  // ⚠ Браузер закрыли посреди загрузки — убиваем процессы И убираем за ними
+  // куски. Иначе в папке остаётся десяток обрывков, которые некому подобрать:
+  // сметутся они только через два часа, при следующем запуске помощника.
+  for (const { child, job } of jobs.values()) {
+    ytdlp.killTree(child);
+    try {
+      const dir = ytdlp.outputDir(job);
+      const base = ytdlp.safeBaseName(job.name);
+      ytdlp.cleanLeftovers(dir, base);
+    } catch {
+      /* уходим молча: процесс всё равно завершается */
+    }
+  }
   process.exit(0);
 });
 

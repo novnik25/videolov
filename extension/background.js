@@ -209,7 +209,13 @@ chrome.webRequest.onResponseStarted.addListener(
     if (d.tabId < 0) return;
     const ct = (d.responseHeaders || []).find((h) => h.name.toLowerCase() === "content-type");
     const hit = classify(d.url, ct?.value || "");
-    if (hit) void record(d.tabId, hit, d.initiator || "");
+    if (!hit) return;
+    // В журнал попадает и эта находка: страница разбора обязана показывать
+    // ВСЕ пути обнаружения, иначе она недоговаривает.
+    void (async () => {
+      const added = await record(d.tabId, hit, d.initiator || "");
+      if (added) await sightings.note(d.url, d.type, d.tabId, `${hit.kind} — по типу ответа`, true);
+    })();
   },
   WEB_FILTER,
   ["responseHeaders"],
@@ -614,10 +620,26 @@ function makePreview(item) {
   const cached = previews.get(item.id);
   if (cached) return cached;
 
-  const task = previewChain.then(
-    () => grabPreview(item),
-    () => grabPreview(item),
-  );
+  // ⚠ Очередь запоминается ДО создания задачи. Если читать previewChain уже
+  // внутри задачи, она прочитает саму себя — ту, что записана строкой ниже, —
+  // и будет ждать собственного завершения вечно. Кадр просто не появлялся.
+  const earlier = previewChain;
+
+  const task = (async () => {
+    // Кадр переживает закрытие окна: без этого ffmpeg запускался бы заново при
+    // КАЖДОМ открытии окна — четыре секунды работы за уже сделанное.
+    const key = `preview:${item.id}`;
+    const saved = await area.get(key);
+    if (saved[key]) return { dataUrl: saved[key] };
+
+    const fresh = await earlier.then(
+      () => grabPreview(item),
+      () => grabPreview(item),
+    );
+    if (fresh?.dataUrl) await area.set({ [key]: fresh.dataUrl });
+    return fresh;
+  })();
+
   previews.set(item.id, task);
   previewChain = task.catch(() => {});
   return task;

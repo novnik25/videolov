@@ -669,3 +669,9 @@ button.ghost[aria-expanded="true"] .chev {
   line-height: 1.55;
   text-align: left;
 }
+
+/* Кнопки под пустым состоянием: главная — обновить страницу. */
+.empty-actions {
+  margin-top: 0;
+  justify-content: center;
+}
